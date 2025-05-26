@@ -1,0 +1,62 @@
+{
+    "n_leaves": 5,
+    "n_nodes": 9,
+    "max_depth": 4,
+    "avg_depth": 2.22,
+    "tree": [
+        {
+            "depth": 0,
+            "cut_hyperplane": "([1, -1, 1], 0)",
+            "parent_idx": null,
+            "centroid": null
+        },
+        {
+            "depth": 1,
+            "cut_hyperplane": "([1, 1, -1], 0)",
+            "parent_idx": 0,
+            "centroid": null
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": "([1, -1, -1], 0)",
+            "parent_idx": 1,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": null,
+            "parent_idx": 2,
+            "centroid": "[0.75, 0.25, 0.25]"
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": "([1, 1, 1], 2)",
+            "parent_idx": 2,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": null,
+            "parent_idx": 4,
+            "centroid": "[0.75, 0.75, 0.75]"
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": null,
+            "parent_idx": 4,
+            "centroid": "[0.5, 0.5, 0.5]"
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": null,
+            "parent_idx": 1,
+            "centroid": "[0.25, 0.25, 0.75]"
+        },
+        {
+            "depth": 1,
+            "cut_hyperplane": null,
+            "parent_idx": 0,
+            "centroid": "[0.25, 0.75, 0.25]"
+        }
+    ]
+}

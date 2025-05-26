@@ -1,8 +1,17 @@
-from tree import *
+from tree import (
+    Polytope,
+    cut_polytope_by_hyperplane_fast,
+    hyperplane_intersects_polytope,
+    build_tree,
+)
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from scipy.spatial import ConvexHull
 from time import perf_counter
+import numpy as np
+
+# Random seed for reproducibility
+np.random.seed(42)
 
 
 def random_polytope(n: int, d: int, bounds: tuple = (0, 1)) -> tuple:
@@ -108,8 +117,6 @@ def compute_polytope_chambers(
     """
     Compute the number of chambers in the polytope using a trivial algorithm.
     """
-
-    start = perf_counter()
     if verbose:
         print(f"Computing chambers for d={d} and {len(hyperplanes)} hyperplanes...")
     simplex = Polytope(*inequalities)
@@ -128,11 +135,14 @@ def compute_polytope_chambers(
 
             new_chambers.append(poly1)
             new_chambers.append(poly2)
+            assert (
+                len(poly1.vertices) >= 4 and len(poly2.vertices) >= 4
+            ), f"Chamber is empty! {len(poly1.vertices)} {len(poly2.vertices)}"
 
         chambers = new_chambers
 
     if verbose:
-        print(f"Found {len(chambers)} chambers in {perf_counter() - start:.2f} s")
+        print(f"Found {len(chambers)} chambers")
     return chambers
 
 
@@ -153,22 +163,46 @@ def performance_test(
 ):
     """
     Run a performance test on the polytope slicing algorithm.
+
+    Parameters
+    ----------
+    n : int
+        The number of points in point cloud to generate the polytope.
+    d : int
+        The number of dimensions.
+    min_hyperplanes : int
+        The minimum number of hyperplanes to test.
+    max_hyperplanes : int
+        The maximum number of hyperplanes to test.
+    increment : int, optional
+        The increment for the number of hyperplanes, by default 1
     """
     # Generate random polytope
     vertices, inequalities = random_polytope(n, d)
-    hyperplanes = generate_random_planes(5, d, vertices)
 
-    times = []
+    times_trivial = []
+    times_tree = []
     n_chambers = []
-    for i in range(min_hyperplanes, max_hyperplanes + 1, increment):
-        hyperplanes = generate_random_planes(i, d, vertices)
+    for nh in range(min_hyperplanes, max_hyperplanes + 1, increment):
+        np.random.seed(42)
+        hyperplanes = generate_random_planes(nh, d, vertices)
         start = perf_counter()
         chambers = compute_polytope_chambers(d, inequalities, hyperplanes)
-        times.append(perf_counter() - start)
+        times_trivial.append(perf_counter() - start)
         n_chambers.append(len(chambers))
+        start = perf_counter()
+        simplex = Polytope(*inequalities)
+        simplex.extreme()
+        _, nchambs = build_tree(simplex, hyperplanes)
+        times_tree.append(perf_counter() - start)
+        assert (
+            len(chambers) == nchambs
+        ), f"Number of chambers do not match! {len(chambers)} != {nchambs} for {nh} hyperplanes"
 
     # Plot the results
-    plt.plot(range(min_hyperplanes, max_hyperplanes + 1, increment), times)
+    plt.plot(range(min_hyperplanes, max_hyperplanes + 1, increment), times_trivial)
+    plt.plot(range(min_hyperplanes, max_hyperplanes + 1, increment), times_tree)
+    plt.legend(["Trivial", "Tree"])
     plt.xlabel("Number of hyperplanes")
     plt.ylabel("Time (s)")
     plt.title(f"Performance test for n={n}, d={d}")
@@ -184,5 +218,37 @@ def performance_test(
     plt.show()
 
 
-n, d = 10, 2
-performance_test(n, d, 1, 200, 10)
+d = 3
+# performance_test(3 * 2**d, d, 141, 150, 10)
+
+vertices, inequalities = random_polytope(3 * 2**d, d)
+np.random.seed(42)
+hyperplanes = generate_random_planes(141, d, vertices)
+simplex = Polytope(*inequalities)
+simplex.extreme()
+root, nchambs = build_tree(simplex, hyperplanes)
+print(f"Number of chambers: {nchambs}")
+
+
+chambers = []
+open_chambers = [root]
+while open_chambers:
+    chamber = open_chambers.pop()
+    if not chamber.children:
+        chambers.append(chamber)
+        continue
+    for child in chamber.children:
+        open_chambers.append(child)
+
+print(f"Number of chambers: {len(chambers)}")
+
+# for each chamber, check if any hyperplane intersects it
+for chamber in chambers:
+    for hyperplane in hyperplanes:
+        if hyperplane_intersects_polytope(chamber.polytope, hyperplane):
+            print("Hyperplane intersects chamber!!!")
+            print(chamber.polytope.vertices)
+            print(hyperplane)
+            print("Inequalities:")
+            print(chamber.polytope)
+            break
