@@ -4,6 +4,7 @@ from pypoman import compute_polytope_vertices  # pypoman->cdd->double descriptio
 import json
 import os
 import cdd
+import cdd.gmp
 
 try:
     from src.utils import get_planes
@@ -11,14 +12,17 @@ except:
     from utils import get_planes
 
 OUT_FOLDER = "data/tree"
-TOLERANCE = 1e-10
 
 
 class Polytope:
+    """
+    Polytope in halfspace representation by Ax <= b.
+    """
+
     def __init__(self, A: np.ndarray, b: np.ndarray):
         self.A = A
-        self.b = b
-        self._vertices: list[np.ndarray] | None = None
+        self.b = b.reshape(b.shape[0], 1)  # Ensure b is a column vector
+        self._vertices: np.ndarray | None = None
         self._dim = A.shape[1]
 
     @property
@@ -31,22 +35,41 @@ class Polytope:
         """
         Computes the vertices of the polytope.
         """
-        self._vertices = compute_polytope_vertices(self.A, self.b)
+        mat = cdd.gmp.matrix_from_array(np.hstack([self.b, -self.A]))
+        mat.rep_type = cdd.gmp.RepType.INEQUALITY
+        polyhedron = cdd.gmp.polyhedron_from_matrix(mat)
+        V = np.array(cdd.gmp.copy_generators(polyhedron).array)  # ndarray of Fraction
+        assert np.all(
+            V[:, 0] == 1
+        ), "Inequalites do not represent a polytope. Vertices should start with 1."
+        self._vertices = V[:, 1:]  # Exclude the first column which is 1 for vertices
 
     def is_degenerate(self):
+        """
+        Polytope is degenerate if it has less than dim + 1 vertices.
+        """
         if self._vertices is None:
             raise ValueError("Vertices are needed to check degeneracy.")
-        return len(self._vertices) < self._dim + 1
+        return self._vertices.shape[0] < self._dim + 1
 
-    def add_halfspace(self, hyperplane: tuple[np.array, int]):
-        A = np.concatenate((self.A, hyperplane[0][None, :]), axis=0)
-        b = np.concatenate((self.b, [hyperplane[1]]), axis=0)
-        # Remove redundant rows
-        mat = cdd.matrix_from_array(np.hstack([b.reshape(-1, 1), -A]))
-        redundant_rows = list(cdd.redundant_rows(mat))
-        A = np.delete(A, redundant_rows, axis=0)
-        b = np.delete(b, redundant_rows, axis=0)
+    def add_halfspace(self, halfspace: tuple[np.array, int]):
+        """
+        Create a new polytope by adding a halfspace defined by a normal vector and an offset.
+        Removes redundant rows from the resulting halfspace representation.
+        """
+        A = np.concatenate((self.A, halfspace[0][None, :]), axis=0)
+        b = np.concatenate((self.b, np.array([halfspace[1]])[None, :]), axis=0)
         return Polytope(A, b)
+
+    def remove_redundancies(self) -> "Polytope":
+        """
+        Removes redundant inequalities
+        """
+        mat = cdd.gmp.matrix_from_array(np.hstack([self.b.reshape(-1, 1), -self.A]))
+        redundant_rows = list(cdd.gmp.redundant_rows(mat))
+        self.A = np.delete(self.A, redundant_rows, axis=0)
+        self.b = np.delete(self.b, redundant_rows, axis=0)
+        return self
 
     def __repr__(self):
         return f"Polytope(A={self.A}, b={self.b})"
@@ -155,7 +178,7 @@ def get_simplex_inequalities(n: int, r: int):
     return A, b
 
 
-def cut_polytope_by_hyperplane_fast(
+def cut_polytope_by_hyperplane(
     polytope: Polytope, hyperplane: tuple[np.array, int]
 ) -> tuple[Polytope, Polytope]:
     """
@@ -170,29 +193,25 @@ def cut_polytope_by_hyperplane_fast(
     return intersection, complement
 
 
-def cut_polytope_by_hyperplane_fast_fast(
+def cut_polytope_by_hyperplane_fast(
     polytope: Polytope, hyperplane: tuple[np.array, int]
 ) -> tuple[Polytope, Polytope]:
     """
     Divide the region by the hyperplane. Return the two child polygons.
     """
-    poly_left = polytope.add_halfspace(hyperplane)
-    poly_left.extreme()
+    intersection = polytope.add_halfspace(hyperplane)
+    intersection.extreme()
 
-    parent_vertices = np.array(polytope.vertices)
-    left_vertices = np.array(poly_left.vertices)
-    c_vertices = left_vertices[
-        np.isclose(left_vertices @ hyperplane[0], hyperplane[1], atol=TOLERANCE)
+    c_hyperplane = (-hyperplane[0], -hyperplane[1])
+    complement = polytope.add_halfspace(c_hyperplane)
+    c_vertices = intersection.vertices[
+        np.where(intersection.vertices @ hyperplane[0] == hyperplane[1])
     ]
-    r_vertices = parent_vertices[
-        parent_vertices @ hyperplane[0] > hyperplane[1] + TOLERANCE
+    r_vertices = polytope.vertices[
+        np.where(polytope.vertices @ hyperplane[0] > hyperplane[1])
     ]
-    right_vertices = np.concatenate((c_vertices, r_vertices), axis=0)
-
-    poly_right = polytope.add_halfspace((-hyperplane[0], -hyperplane[1]))
-    poly_right._vertices = right_vertices
-
-    return poly_left, poly_right
+    complement._vertices = np.concatenate((c_vertices, r_vertices), axis=0)
+    return intersection, complement
 
 
 def hyperplane_intersects_polytope(
@@ -201,91 +220,34 @@ def hyperplane_intersects_polytope(
     """
     Check if the hyperplane intersects the polytope.
     """
-    # Check if the hyperplane intersects the polytope
-    vertices = np.array(polytope.vertices)
-    values = vertices @ hyperplane[0]
-
-    # Check if any vertex is on the opposite side of the hyperplane
-    return np.any(values < hyperplane[1] - TOLERANCE) and np.any(
-        values > hyperplane[1] + TOLERANCE
-    )
+    values = polytope.vertices @ hyperplane[0]
+    return np.any(values < hyperplane[1]) and np.any(values > hyperplane[1])
 
 
 def hyperplanes_intersect_polytope(
     polytope: Polytope, hyperplanes: list[tuple[np.array, int]]
 ) -> np.ndarray[bool]:
     """
-    Optimized version with numpy to check if the hyperplanes intersect the polytope.
+    Optimized version to check if multiple hyperplanes intersect the polytope.
     """
     W = np.array([h[0] for h in hyperplanes])
     b = np.array([h[1] for h in hyperplanes])
-
-    vertices = np.array(polytope.vertices)
-    values = vertices @ W.T
-
-    # Check if any vertex is on the opposite side of the hyperplane
-    return np.any(values < b - TOLERANCE, axis=0) & np.any(
-        values > b + TOLERANCE, axis=0
-    )
+    values = polytope.vertices @ W.T
+    return np.any(values < b, axis=0) & np.any(values > b, axis=0)
 
 
-def get_best_split_fast(polytope: Polytope, candidate_hyperplanes: list) -> tuple:
+def get_best_split(
+    polytope: Polytope, candidate_hyperplanes: list
+) -> tuple[tuple, tuple[Polytope], list]:
     """
     Get the hyperplane that best splits the polytope, the two resulting polytopes and the remaining candidate hyperplanes.
     """
-    print(candidate_hyperplanes[0][0].dtype)
-    if polytope.A.shape[0] == 13 and np.all(
-        np.isclose(
-            polytope.A,
-            [
-                [3.03922519, -5.51461381, 4.24358443],
-                [-7.31969543, -9.42434647, 5.10274511],
-                [8.80917169, 9.07857154, 8.2972878],
-                [-7.63670345, 3.93474331, 2.57885694],
-                [8.69896814, -8.97771075, -9.31264066],
-                [3.78035357, 3.49633356, -4.59212357],
-                [7.93752262, -8.05105813, -0.10504745],
-                [-3.15225785, -1.36617207, 8.12650464],
-                [6.64885282, -5.75321779, -6.36350066],
-                [-8.8488248, 0.99057765, -1.16938997],
-                [-6.99294781, 5.05303797, 0.98911729],
-                [-4.30319011, -9.26226105, 2.19128668],
-                [-1.03813678, -1.21875943, -7.53307205],
-            ],
-        )
-    ):
-        print("THEY ARE CLOSE1!!!!")
-        print(candidate_hyperplanes)
-
     if len(candidate_hyperplanes) == 0:
         return None, None, None
 
     # Get the hyperplanes that intersect the polytope
     hyp_intersects = hyperplanes_intersect_polytope(polytope, candidate_hyperplanes)
     new_candidate_indices = np.where(hyp_intersects)[0]
-
-    if polytope.A.shape[0] == 13 and np.all(
-        np.isclose(
-            polytope.A,
-            [
-                [3.03922519, -5.51461381, 4.24358443],
-                [-7.31969543, -9.42434647, 5.10274511],
-                [8.80917169, 9.07857154, 8.2972878],
-                [-7.63670345, 3.93474331, 2.57885694],
-                [8.69896814, -8.97771075, -9.31264066],
-                [3.78035357, 3.49633356, -4.59212357],
-                [7.93752262, -8.05105813, -0.10504745],
-                [-3.15225785, -1.36617207, 8.12650464],
-                [6.64885282, -5.75321779, -6.36350066],
-                [-8.8488248, 0.99057765, -1.16938997],
-                [-6.99294781, 5.05303797, 0.98911729],
-                [-4.30319011, -9.26226105, 2.19128668],
-                [-1.03813678, -1.21875943, -7.53307205],
-            ],
-        )
-    ):
-        print("THEY ARE CLOSE!!!!")
-        print(new_candidate_indices)
 
     if len(new_candidate_indices) == 0:
         return None, None, None
@@ -295,83 +257,9 @@ def get_best_split_fast(polytope: Polytope, candidate_hyperplanes: list) -> tupl
     b_hyperplane = candidate_hyperplanes[b_iH]
     b_polys = cut_polytope_by_hyperplane_fast(polytope, b_hyperplane)
 
-    if b_polys[0].A.shape[0] == 13 and np.all(
-        np.isclose(
-            b_polys[0].A,
-            [
-                [3.03922519, -5.51461381, 4.24358443],
-                [-7.31969543, -9.42434647, 5.10274511],
-                [8.80917169, 9.07857154, 8.2972878],
-                [-7.63670345, 3.93474331, 2.57885694],
-                [8.69896814, -8.97771075, -9.31264066],
-                [3.78035357, 3.49633356, -4.59212357],
-                [7.93752262, -8.05105813, -0.10504745],
-                [-3.15225785, -1.36617207, 8.12650464],
-                [6.64885282, -5.75321779, -6.36350066],
-                [-8.8488248, 0.99057765, -1.16938997],
-                [-6.99294781, 5.05303797, 0.98911729],
-                [-4.30319011, -9.26226105, 2.19128668],
-                [-1.03813678, -1.21875943, -7.53307205],
-            ],
-        )
-    ):
-        print("THEY ARE CLOSE2!!!!")
-        print(b_hyperplane, candidate_hyperplanes, new_candidate_indices)
-
-    if b_polys[1].A.shape[0] == 13 and np.all(
-        np.isclose(
-            b_polys[1].A,
-            [
-                [3.03922519, -5.51461381, 4.24358443],
-                [-7.31969543, -9.42434647, 5.10274511],
-                [8.80917169, 9.07857154, 8.2972878],
-                [-7.63670345, 3.93474331, 2.57885694],
-                [8.69896814, -8.97771075, -9.31264066],
-                [3.78035357, 3.49633356, -4.59212357],
-                [7.93752262, -8.05105813, -0.10504745],
-                [-3.15225785, -1.36617207, 8.12650464],
-                [6.64885282, -5.75321779, -6.36350066],
-                [-8.8488248, 0.99057765, -1.16938997],
-                [-6.99294781, 5.05303797, 0.98911729],
-                [-4.30319011, -9.26226105, 2.19128668],
-                [-1.03813678, -1.21875943, -7.53307205],
-            ],
-        )
-    ):
-        print("THEY ARE CLOSE3!!!!")
-        print(b_hyperplane, candidate_hyperplanes, new_candidate_indices)
-
     # Remove used hyperplane from the list of candidate hyperplanes
     new_candidate_hyperplanes = [
         candidate_hyperplanes[i] for i in new_candidate_indices if i != b_iH
-    ]
-
-    return b_hyperplane, b_polys, new_candidate_hyperplanes
-
-
-def get_best_split(polytope: Polytope, candidate_hyperplanes: list) -> tuple:
-    """
-    Get the hyperplane that best splits the polytope, the two resulting polytopes and the remaining candidate hyperplanes.
-    """
-    new_candidate_hyperplanes = []
-
-    for iH, hyp in enumerate(candidate_hyperplanes):
-        if hyperplane_intersects_polytope(polytope, hyp):
-            new_candidate_hyperplanes.append(iH)
-
-    if len(new_candidate_hyperplanes) == 0:
-        return None, None, None
-
-    # Pick a random hyperplane
-    b_iH = np.random.choice(new_candidate_hyperplanes)
-    b_hyperplane = candidate_hyperplanes[b_iH]
-    b_polys = cut_polytope_by_hyperplane_fast(polytope, b_hyperplane)
-
-    # Remove best hyperplane from the list of candidate hyperplanes
-    new_candidate_hyperplanes.remove(b_iH)
-
-    new_candidate_hyperplanes = [
-        candidate_hyperplanes[i] for i in new_candidate_hyperplanes
     ]
 
     return b_hyperplane, b_polys, new_candidate_hyperplanes
@@ -389,47 +277,22 @@ def build_tree(simplex: Polytope, candidate_hyperplanes: list) -> tuple[TreeNode
     while queue:
         node = queue.pop()
 
-        hyperplane, polys, new_candidate_hyperplanes = get_best_split_fast(
+        hyperplane, polys, new_candidate_hyperplanes = get_best_split(
             node.polytope, node.candidate_hyperplanes
         )
-
-        # if node.polytope.A.shape[0] == 13 and np.all(
-        #     np.isclose(
-        #         node.polytope.A,
-        #         [
-        #             [3.03922519, -5.51461381, 4.24358443],
-        #             [-7.31969543, -9.42434647, 5.10274511],
-        #             [8.80917169, 9.07857154, 8.2972878],
-        #             [-7.63670345, 3.93474331, 2.57885694],
-        #             [8.69896814, -8.97771075, -9.31264066],
-        #             [3.78035357, 3.49633356, -4.59212357],
-        #             [7.93752262, -8.05105813, -0.10504745],
-        #             [-3.15225785, -1.36617207, 8.12650464],
-        #             [6.64885282, -5.75321779, -6.36350066],
-        #             [-8.8488248, 0.99057765, -1.16938997],
-        #             [-6.99294781, 5.05303797, 0.98911729],
-        #             [-4.30319011, -9.26226105, 2.19128668],
-        #             [-1.03813678, -1.21875943, -7.53307205],
-        #         ],
-        #     )
-        # ):
-        #     print("THEY ARE CLOSE!!!!")
-        #     print(hyperplane, polys, new_candidate_hyperplanes)
 
         if hyperplane is None:
             n_chambers += 1  # Count leaf nodes
             if prev_chambers != n_chambers and n_chambers % 1000 == 0:
                 print(f"Found {n_chambers} chambers.")
                 prev_chambers = n_chambers
-            continue
-        elif polys[0].is_degenerate() or polys[1].is_degenerate():
-            print(f"Warning: Degenerate polytope generated. Numerical error.")
+            node.centroid
         else:
             node.set_cut(hyperplane)
             for poly in polys:
                 child = node.add_child(poly, new_candidate_hyperplanes)
                 queue.append(child)
-        node.clean()
+            node.clean()
 
     return root, n_chambers
 
@@ -459,6 +322,43 @@ def compute_tree(n: int, r: int, verbose: bool = True) -> TreeNode:
         print(f"Saved tree in {perf_counter() - start_save:.2f} s")
 
     return root
+
+
+def compute_polytope_chambers(
+    inequalities: np.ndarray, hyperplanes: list, verbose: bool = False
+) -> list:
+    """
+    Compute the number of chambers in the polytope using a trivial algorithm.
+    """
+    if verbose:
+        print(
+            f"Computing chambers for dim={inequalities.shape[1]} and {len(hyperplanes)} hyperplanes..."
+        )
+    simplex = Polytope(*inequalities)
+    simplex.extreme()
+
+    if verbose:
+        print(f"Computing chambers...")
+    chambers = [simplex]
+    for hyperplane in hyperplanes:
+        new_chambers = []
+        for chamber in chambers:
+            if not hyperplane_intersects_polytope(chamber, hyperplane):
+                new_chambers.append(chamber)
+                continue
+            poly1, poly2 = cut_polytope_by_hyperplane(chamber, hyperplane)
+
+            new_chambers.append(poly1)
+            new_chambers.append(poly2)
+            assert (
+                len(poly1.vertices) >= 4 and len(poly2.vertices) >= 4
+            ), f"Chamber is empty! {len(poly1.vertices)} {len(poly2.vertices)}"
+
+        chambers = new_chambers
+
+    if verbose:
+        print(f"Found {len(chambers)} chambers")
+    return chambers
 
 
 def save_tree(root: TreeNode, filename: str):
@@ -547,7 +447,7 @@ def load_tree(filename: str) -> TreeNode:
 
 # @memory_profiler.profile
 def main():
-    n, r = 6, 2
+    n, r = 1, 7
     _ = compute_tree(n, r)
 
 
