@@ -1,6 +1,6 @@
-import numpy as np
 import itertools
 import math
+import numpy as np
 
 
 def generate_admissible_matrices_fixed_r_prime(

@@ -1,10 +1,10 @@
 import numpy as np
 from time import perf_counter
-from pypoman import compute_polytope_vertices  # pypoman->cdd->double description method
 import json
 import os
-import cdd
 import cdd.gmp
+from fractions import Fraction
+import numpy as np
 
 try:
     from src.utils import get_planes
@@ -91,7 +91,6 @@ class TreeNode:
         self.children = []
         self.cut_hyperplane = None
         self._centroid = None
-        self._alpha = None
 
     @property
     def centroid(self):
@@ -101,15 +100,12 @@ class TreeNode:
             self._centroid = np.mean(self.polytope.vertices, axis=0)
         return self._centroid
 
-    def alpha_representative(self, n: int, r: int):
+    def get_alpha_representative(self, n: int, r: int):
         """
         Compute the alpha-representative of the polytope.
         """
-        if self._alpha is None:
-            alpha_eps = self.centroid.reshape(n, r - 1)
-            alpha = np.hstack((np.zeros((n, 1)), alpha_eps))
-            self._alpha = alpha
-        return self._alpha
+        alpha_eps = self.centroid.reshape(n, r - 1)
+        return np.hstack((np.zeros((n, 1), dtype=int), alpha_eps))
 
     def add_child(
         self,
@@ -158,42 +154,7 @@ class TreeNode:
         )
 
 
-def get_simplex_inequalities(n: int, r: int):
-    """
-    Get the inequalities for the corner simplex in n dimensions.
-    """
-
-    A = np.zeros((n * (r + 1), n * r), dtype=int)
-    b = np.zeros(n * (r + 1), dtype=int)
-
-    for i in range(n):
-        for j in range(r):
-            A[i * (r + 1) + j, i * r + j] = -1
-            A[i * (r + 1) + j + 1, i * r + j] = 1
-
-    for i in range(n):
-        b[i * (r + 1) : (i + 1) * (r + 1)] = 0
-        b[i * (r + 1) + r] = 1
-
-    return A, b
-
-
 def cut_polytope_by_hyperplane(
-    polytope: Polytope, hyperplane: tuple[np.array, int]
-) -> tuple[Polytope, Polytope]:
-    """
-    Divide the region by the hyperplane. Return the two child polygons.
-    """
-    intersection = polytope.add_halfspace(hyperplane)
-    intersection.extreme()
-
-    c_hyperplane = (-hyperplane[0], -hyperplane[1])
-    complement = polytope.add_halfspace(c_hyperplane)
-    complement.extreme()
-    return intersection, complement
-
-
-def cut_polytope_by_hyperplane_fast(
     polytope: Polytope, hyperplane: tuple[np.array, int]
 ) -> tuple[Polytope, Polytope]:
     """
@@ -255,7 +216,7 @@ def get_best_split(
     # Split the polytope by the hyperplane
     b_iH = np.random.choice(new_candidate_indices)
     b_hyperplane = candidate_hyperplanes[b_iH]
-    b_polys = cut_polytope_by_hyperplane_fast(polytope, b_hyperplane)
+    b_polys = cut_polytope_by_hyperplane(polytope, b_hyperplane)
 
     # Remove used hyperplane from the list of candidate hyperplanes
     new_candidate_hyperplanes = [
@@ -282,83 +243,19 @@ def build_tree(simplex: Polytope, candidate_hyperplanes: list) -> tuple[TreeNode
         )
 
         if hyperplane is None:
+            node.centroid
             n_chambers += 1  # Count leaf nodes
             if prev_chambers != n_chambers and n_chambers % 1000 == 0:
                 print(f"Found {n_chambers} chambers.")
                 prev_chambers = n_chambers
-            node.centroid
         else:
             node.set_cut(hyperplane)
             for poly in polys:
                 child = node.add_child(poly, new_candidate_hyperplanes)
                 queue.append(child)
-            node.clean()
+        node.clean()
 
     return root, n_chambers
-
-
-def compute_tree(n: int, r: int, verbose: bool = True) -> TreeNode:
-    """
-    Compute and save the tree of polytopes for a given n and r.
-    """
-    if verbose:
-        print(f"Computing tree for n={n}, r={r}")
-    start = perf_counter()
-    simplex_inequalities = get_simplex_inequalities(n, r - 1)
-    simplex = Polytope(*simplex_inequalities)
-    simplex.extreme()
-
-    planes = get_planes(n, r, 0, use_epsilons=True)
-    candidate_hyperplanes = [(p[0], b) for p in planes for b in p[1]]
-
-    root, n_chambers = build_tree(simplex, candidate_hyperplanes)
-    if verbose:
-        print(f"Found {n_chambers} chambers in {perf_counter() - start:.2f} s")
-        print("Saving tree...")
-
-    start_save = perf_counter()
-    save_tree(root, f"tree_n{n}_r{r}.json")
-    if verbose:
-        print(f"Saved tree in {perf_counter() - start_save:.2f} s")
-
-    return root
-
-
-def compute_polytope_chambers(
-    inequalities: np.ndarray, hyperplanes: list, verbose: bool = False
-) -> list:
-    """
-    Compute the number of chambers in the polytope using a trivial algorithm.
-    """
-    if verbose:
-        print(
-            f"Computing chambers for dim={inequalities.shape[1]} and {len(hyperplanes)} hyperplanes..."
-        )
-    simplex = Polytope(*inequalities)
-    simplex.extreme()
-
-    if verbose:
-        print(f"Computing chambers...")
-    chambers = [simplex]
-    for hyperplane in hyperplanes:
-        new_chambers = []
-        for chamber in chambers:
-            if not hyperplane_intersects_polytope(chamber, hyperplane):
-                new_chambers.append(chamber)
-                continue
-            poly1, poly2 = cut_polytope_by_hyperplane(chamber, hyperplane)
-
-            new_chambers.append(poly1)
-            new_chambers.append(poly2)
-            assert (
-                len(poly1.vertices) >= 4 and len(poly2.vertices) >= 4
-            ), f"Chamber is empty! {len(poly1.vertices)} {len(poly2.vertices)}"
-
-        chambers = new_chambers
-
-    if verbose:
-        print(f"Found {len(chambers)} chambers")
-    return chambers
 
 
 def save_tree(root: TreeNode, filename: str):
@@ -445,6 +342,34 @@ def load_tree(filename: str) -> TreeNode:
     return nodes[0]
 
 
+def compute_tree(n: int, r: int, verbose: bool = True) -> TreeNode:
+    """
+    Compute and save the tree of polytopes for a given n and r. This is a use case of the
+    algorithm for a math problem, with a specified initial polytope (simplex) and a set of candidate hyperplanes.
+    """
+    if verbose:
+        print(f"Computing tree for n={n}, r={r}")
+    start = perf_counter()
+    simplex_inequalities = get_simplex_inequalities(n, r - 1)
+    simplex = Polytope(*simplex_inequalities)
+    simplex.extreme()
+
+    planes = get_planes(n, r, 0, use_epsilons=True)
+    candidate_hyperplanes = [(p[0], b) for p in planes for b in p[1]]
+
+    root, n_chambers = build_tree(simplex, candidate_hyperplanes)
+    if verbose:
+        print(f"Found {n_chambers} chambers in {perf_counter() - start:.2f} s")
+        print("Saving tree...")
+
+    start_save = perf_counter()
+    save_tree(root, f"tree_n{n}_r{r}.json")
+    if verbose:
+        print(f"Saved tree in {perf_counter() - start_save:.2f} s")
+
+    return root
+
+
 # @memory_profiler.profile
 def main():
     n, r = 1, 7
@@ -487,4 +412,4 @@ def test_load_tree(n: int, r: int):
 
 if __name__ == "__main__":
     main()
-    # test_load_tree(3, 2)
+    # test_load_tree(1, 7)

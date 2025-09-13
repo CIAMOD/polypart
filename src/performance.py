@@ -146,6 +146,43 @@ def compute_polytope_chambers(
     return chambers
 
 
+def compute_polytope_chambers(
+    inequalities: np.ndarray, hyperplanes: list, verbose: bool = False
+) -> list:
+    """
+    Compute the number of chambers in the polytope using a trivial algorithm.
+    """
+    if verbose:
+        print(
+            f"Computing chambers for dim={inequalities.shape[1]} and {len(hyperplanes)} hyperplanes..."
+        )
+    simplex = Polytope(*inequalities)
+    simplex.extreme()
+
+    if verbose:
+        print(f"Computing chambers...")
+    chambers = [simplex]
+    for hyperplane in hyperplanes:
+        new_chambers = []
+        for chamber in chambers:
+            if not hyperplane_intersects_polytope(chamber, hyperplane):
+                new_chambers.append(chamber)
+                continue
+            poly1, poly2 = cut_polytope_by_hyperplane_fast(chamber, hyperplane)
+
+            new_chambers.append(poly1)
+            new_chambers.append(poly2)
+            assert (
+                len(poly1.vertices) >= 4 and len(poly2.vertices) >= 4
+            ), f"Chamber is empty! {len(poly1.vertices)} {len(poly2.vertices)}"
+
+        chambers = new_chambers
+
+    if verbose:
+        print(f"Found {len(chambers)} chambers")
+    return chambers
+
+
 # vertices, inequalities = random_polytope(10, 2)
 # hyperplanes = generate_random_planes(5, 2, vertices)
 
