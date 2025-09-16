@@ -1,49 +1,59 @@
-# polypart
+# PolyPart 0.1.0
 
-polypart provides a tool to count partitions of convex polytopes (in H-representation) after being
-split by a set of affine hyperplanes. The package uses exact rational arithmetic (Fraction)
-to avoid numerical issues and relies on `pycddlib` to convert between H-representation
-and V-representation (vertices). The main feature is to build a partition decision tree
-to both count the number of regions and classify points into their respective regions.
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/aa6f0c16-2ae5-4d86-92f7-86d47ac6596f" />
+</p>
 
-## Features
+<p align="center">
+   <span>
 
-- Represent polytopes and hyperplanes using exact rational arithmetic (Fraction).
-- Split polytopes with affine hyperplanes and build a partition decision tree.
-- Serialize/deserialize the partition trees to JSON for downstream analysis or
-  visualization.
+   [![pypi](https://img.shields.io/pypi/v/motives.svg)](https://pypi.python.org/pypi/motives)
+   [![PyPI Downloads](https://static.pepy.tech/badge/motives)](https://pepy.tech/projects/motives)
+   [![python](https://img.shields.io/badge/python-%5E3.10-blue)]()
+   [![os](https://img.shields.io/badge/OS-Ubuntu%2C%20Mac%2C%20Windows-purple)]()
+   </span>
+</p>
 
-## Requirements
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- Python == 3.10
-- numpy
-- pycddlib (pycddlib uses GMP; platform-specific installation may be required)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-black?logo=github)](https://github.com/ciamod/polypart)
 
-Requirements are listed in `pyproject.toml` under `[project].dependencies`.
 
-## Installation
+PolyPart is a Python package for counting partitions of convex polytopes by a set of affine hyperplanes. The package uses exact rational arithmetic (Fraction) to avoid numerical issues and relies on `pycddlib` to efficiently convert between H-representation and V-representation (vertices).
 
-It's recommended to use a virtual environment. From the project root run:
+In particular, we build a partition decision tree to both count the number of regions and classify new points into their respective regions.
 
-```powershell
-# Create and activate a venv (Windows PowerShell)
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
 
-# Install the package in editable mode (installs runtime deps)
-python -m pip install -e .
+## Citation
+
+If you use the "polypart" package in your work, please cite the paper
+
+>Sergio Herreros, David Alfaya, José Portela and Jaime Pizarroso. [In Progress](https://arxiv.org/abs/XXXX.XXXXX). _arXiv:XXXX.XXXXX_, 2025.
+
+## Getting Started
+
+### Prerequisites
+
+- Python >= 3.10.6
+- numpy >= 1.24.4
+- pycddlib >= 3.0.2
+
+### Installation
+
+1. Install the package from PyPI
+
+```sh
+pip install polypart
 ```
 
-Note about `pycddlib`: on some platforms (notably Windows) you may need
-to install a prebuilt wheel or use conda to obtain a compatible build with
-GMP support. If `pip install -e .` fails at `pycddlib`, consider `conda install -c conda-forge pycddlib`.
+2. Import the package in your Python code
+```python
+import polypart
+```
 
-## Quickstart (unit square example)
+## Usage
 
-The `examples/square.py` script demonstrates building a simple partition of
-the unit square by two axis-aligned hyperplanes and how to save and plot the
-result.
-
-Minimal programmatic usage is:
+The minimal workflow to create a partition of a polytope by hyperplanes is as follows:
 
 ```python
 from fractions import Fraction
@@ -51,99 +61,63 @@ from polypart.geometry import Polytope, Hyperplane
 from polypart.ppart import build_partition_tree
 from polypart.io import save_tree
 
-# unit square: 0 <= x <= 1, 0 <= y <= 1 expressed as A x <= b
+# 1. Create initial polytope object in H-representation
+# unit square: 0 <= x <= 1, 0 <= y <= 1
 A = [[-1, 0], [1, 0], [0, -1], [0, 1]]
 b = [0, 1, 0, 1]
-square = Polytope(A, b)
+square = Polytope(A, b) # expressed as A x <= b
 square.extreme()  # compute vertices (V-representation)
 
-h1 = Hyperplane.from_coefficients([1, 0, Fraction(1, 3)])
-h2 = Hyperplane.from_coefficients([0, 1, Fraction(1, 3)])
+h1 = Hyperplane.from_coefficients([1, 0, Fraction(1, 3)]) # x = 1/3
+h2 = Hyperplane.from_coefficients([0, 1, Fraction(1, 3)]) # y = 1/3
 
 tree, n_parts = build_partition_tree(square, [h1, h2])
 save_tree(tree, "data/square_partitions.json")
 print("Number of regions:", n_parts)
+
+# Output: 'Number of regions: 4'
 ```
-
-Run the example from the project root:
-
-```powershell
-python -m examples.square
-```
-
-This will create `data/square_partitions.json` and `images/square_partitions.png`.
 
 ## Examples
 
-- `examples/square.py`
-  - Demonstrates a 2D unit square partitioned by two hyperplanes.
-  - Builds the partition tree via `build_partition_tree`, saves the tree with
-    `polypart.io.save_tree`, and produces a scatter plot coloring points by
-    region.
+Complete Jupyter notebooks providing guided, reproducible demonstrations of how to use PolyPart are available in the [examples folder](https://github.com/ciamod/polypart/examples):
 
-- `examples/moduli.py`
-  - A more specialized script used to compute combinatorial moduli for a
-    mathematics research workflow. It constructs a simplex polytope and
-    enumerates candidate partitioning hyperplanes (using combinatorial
-    generation utilities in the same script), then builds and saves the
-    partition tree(s) into `data/moduli_n{n}_r{r}.json`.
-  - This example is computationally heavier and intended as a reference for
-    research use cases; see the top of the file for parameters and usage.
+- **Partitioning_Unit_Square.ipynb**  
+  Demonstrates the algorithm on a simple, visual case: partitioning the unit square with three hyperplanes.
 
-## Library API (overview)
+- **Moduli_Stability_Chambers.ipynb**  
+  A higher-dimensional research application on moduli spaces of parabolic vector bundles.
 
-polypart exposes a small set of modules. This overview highlights the most
-commonly used classes and functions.
-
-- `polypart.geometry`
-  - `Polytope(A, b)` — Construct from H-representation (A x <= b). Use
-    `extreme()` to compute and cache vertices (V-rep) using pycddlib.
-  - `Hyperplane(normal, offset)` / `Hyperplane.from_coefficients([...])`
-    — Represent affine hyperplanes `normal · x = offset` and the halfspace
-    convention `normal · x <= offset`.
-
-- `polypart.ppart`
-  - `PartitionNode`, `PartitionTree` — Tree node and tree containers used to
-    represent the partition decision tree.
-  - `build_partition_tree(polytope, hyperplanes)` — Construct a partition
-    tree by recursively splitting polytope regions with candidate hyperplanes.
-    Returns `(tree, n_regions)`.
-
-- `polypart.io`
-  - `save_tree(tree, path)` — Serialize a PartitionTree to a JSON file.
-  - `load_tree(path)` — Deserialize back to a `PartitionTree` (polytope fields
-    will be `None`; the structural data needed for classification is restored).
-
-- `polypart.ftyping`
-  - Utilities for exact arithmetic conversion: `to_fraction`,
-    `as_fraction_vector`, `as_fraction_matrix`.
-
-## Running tests
-
-The project uses pytest. From the project root (inside an activated venv):
-
-```powershell
-python -m pytest -q
-```
-
-If tests fail with import errors for `pycddlib` or `cdd`, verify that
-`pycddlib` was installed correctly and that GMP is available to the system.
-
-## Notes and platform caveats
-
-- Exact rational arithmetic implies that polytope vertex computations use
-  `pycddlib` which depends on GMP. On Linux/macOS the library is commonly
-  available via package managers or pip wheels. On Windows you may prefer
-  `conda` (conda-forge) to obtain a working `pycddlib` build.
-- The `examples/moduli.py` script can be slow or memory-intensive depending
-  on parameters (`n`, `r`), as it enumerates combinatorial configurations.
-
-## Contributing
-
-Contributions are welcome. Please open issues or pull requests with small,
-focused changes. If you add public API surface, include tests and update this
-README accordingly.
 
 ## License
 
-This project is licensed under the MIT License — see `LICENSE` for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Authors
+
+- ***Sergio Herreros Pérez***, Graduate in Mathematical Engineering and Artificial Intelligence, ICAI, Comillas Pontifical University
+- ***José Portela González***, Department of Quantitative Methods, Comillas Pontifical University
+- ***David Alfaya Sánchez***, Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
+- ***Jaime Pizarroso Gonzalo***, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University
+
+## Acknowledgments
+
+This research was supported by project CIAMOD (Applications of computational methods and artificial intelligence to the study of moduli spaces, project PP2023_9) funded by Convocatoria de Financiación de Proyectos de Investigación Propios 2023, Universidad Pontificia Comillas, and by grants PID2022-142024NB-I00 and RED2022-134463-T funded by MCIN/AEI/10.13039/501100011033.
+
+Find more about the CIAMOD project in the [project webpage](https://ciamod.github.io/) and the [IIT proyect webpage](https://www.iit.comillas.edu/publicacion/proyecto/en/CIAMOD/Aplicaciones_de_m%c3%a9todos_computacionales_y_de_inteligencia_artificial_al_estudio_de_espacios_de_moduli).
+
+Special thanks to everyone who contributed to the project:
+
+- David Alfaya Sánchez (PI), Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
+- Javier Rodrigo Hitos, Department of Applied Mathematics, ICAI, Comillas Pontifical University
+- Luis Ángel Calvo Pascual, Department of Quantitative Methods, ICADE, Comillas Pontifical University
+- Anitha Srinivasan, Department of Quantitative Methods, ICADE, Comillas Pontifical University
+- José Portela González, Department of Quantitative Methods, ICADE, IIT, Comillas Pontifical University
+- Jaime Pizarroso Gonzalo, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University
+- Tomás Luis Gómez de Quiroga, Institute of Mathematical Sciences, UAM-UCM-UC3M-CSIC
+- Daniel Sánchez Sánchez, Student of the Degree in Mathematical Engineering and Artificial Intelligence, Institute for Research in Technology, ICAI, Comillas Pontifical University
+- Alejandro Martínez de Guinea García, Student of the Degree in Mathematical Engineering and Artificial Intelligence, Institute for Research in Technology, ICAI, Comillas Pontifical University
+- Sergio Herreros Pérez, Student of the Degree in Mathematical Engineering and Artificial Intelligence, Institute for Research in Technology, ICAI, Comillas Pontifical University
+
+## References
+
