@@ -1,7 +1,7 @@
 # PolyPart 0.1.0
 
 <p align="center">
-  <img width="1024" height="1024" alt="polypart-logo" src="https://github.com/user-attachments/assets/684ce993-5d7e-4e3c-a3d9-b475d2d5a2fe" />
+  <img width="1024" height="768" alt="polypart-logo" src="https://github.com/user-attachments/assets/a9d7a7fd-89e2-436c-ab4b-2663d78091d6" />
 </p>
 
 <p align="center">
