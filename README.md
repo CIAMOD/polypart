@@ -1,29 +1,23 @@
 # polypart
 
-polypart builds partitions of convex polytopes (in H-representation) by splitting
-them with affine hyperplanes. It uses exact rational arithmetic (fractions)
-and relies on pycddlib for conversions between H-representation and V-representation
-when computing vertices.
-
-This README explains the purpose of the package, how to install it, the main
-API primitives, the provided examples, and how to run the test-suite.
+polypart provides a tool to count partitions of convex polytopes (in H-representation) after being
+split by a set of affine hyperplanes. The package uses exact rational arithmetic (Fraction)
+to avoid numerical issues and relies on `pycddlib` to convert between H-representation
+and V-representation (vertices). The main feature is to build a partition decision tree
+to both count the number of regions and classify points into their respective regions.
 
 ## Features
 
-- Represent polytopes using exact rational arithmetic (Fraction).
-- Convert between H-representation (A x <= b) and V-representation (vertices)
-  via pycddlib.
+- Represent polytopes and hyperplanes using exact rational arithmetic (Fraction).
 - Split polytopes with affine hyperplanes and build a partition decision tree.
 - Serialize/deserialize the partition trees to JSON for downstream analysis or
   visualization.
 
 ## Requirements
 
-- Python >= 3.10
+- Python == 3.10
 - numpy
 - pycddlib (pycddlib uses GMP; platform-specific installation may be required)
-- matplotlib (optional — used by the example plotting script)
-- seaborn (optional — styling for example plots)
 
 Requirements are listed in `pyproject.toml` under `[project].dependencies`.
 
