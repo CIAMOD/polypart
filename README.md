@@ -1,13 +1,24 @@
 <p align="center">
-  <img width="100%" alt="polypart-logo" src="https://raw.githubusercontent.com/CIAMOD/polypart/develop/images/polypart-logo.png" />
+  <img width="60%" alt="polypart-logo" src="https://raw.githubusercontent.com/CIAMOD/polypart/develop/images/polypart-logo.png" />
 </p>
 
-[![pypi](https://img.shields.io/pypi/v/motives.svg)](https://test.pypi.org/project/polypart/)
-[![PyPI Downloads](https://static.pepy.tech/badge/motives)](https://pepy.tech/projects/motives)
-[![python](https://img.shields.io/badge/python-%5E3.10-blue)]()
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-black?logo=github)](https://github.com/ciamod/polypart)
-
+<p align="center">
+  <a href="https://test.pypi.org/project/polypart/">
+    <img src="https://img.shields.io/pypi/v/motives.svg" alt="PyPI">
+  </a>
+  <a href="https://pepy.tech/projects/motives">
+    <img src="https://static.pepy.tech/badge/motives" alt="Downloads">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img src="https://img.shields.io/badge/python-%5E3.10-blue" alt="Python">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+  </a>
+  <a href="https://github.com/ciamod/polypart">
+    <img src="https://img.shields.io/badge/GitHub-Repo-black?logo=github" alt="GitHub Repo">
+  </a>
+</p>
 
 PolyPart is a Python library for **partitioning d-dimensional convex polytopes** by affine hyperplanes by building a ***decision tree***, outputing the exact number of regions and allowing efficient point classification into the resulting regions.
 
