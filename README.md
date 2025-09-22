@@ -1,9 +1,8 @@
 <p align="center">
-  <img width="100%" alt="polypart-logo" src="https://private-user-images.githubusercontent.com/94929744/490196351-a9d7a7fd-89e2-436c-ab4b-2663d78091d6.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTgwNDgyMzgsIm5iZiI6MTc1ODA0NzkzOCwicGF0aCI6Ii85NDkyOTc0NC80OTAxOTYzNTEtYTlkN2E3ZmQtODllMi00MzZjLWFiNGItMjY2M2Q3ODA5MWQ2LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA5MTYlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwOTE2VDE4Mzg1OFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTNhZTY3NDcwZmVhZTRjMjYzNDViMWJlYzE2MmUyZTVkNWE1YTdkYjUzYmJiZTc5MTE0ZWE2MmNmMmZkMDkxYTgmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.8FifR8DOKU6fs2gyjUhfQkSMeW8xUTqMtR9uSBq_R04" />
+  <img width="100%" alt="polypart-logo" src="https://raw.githubusercontent.com/CIAMOD/polypart/develop/images/polypart-logo.png" />
 </p>
 
-
-[![pypi](https://img.shields.io/pypi/v/motives.svg)](https://pypi.python.org/pypi/motives)
+[![pypi](https://img.shields.io/pypi/v/motives.svg)](https://test.pypi.org/project/polypart/)
 [![PyPI Downloads](https://static.pepy.tech/badge/motives)](https://pepy.tech/projects/motives)
 [![python](https://img.shields.io/badge/python-%5E3.10-blue)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
