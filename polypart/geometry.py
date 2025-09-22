@@ -45,7 +45,7 @@ class Hyperplane:
 
 
 class Polytope:
-    """Convex polytope in H-representation ``A x ≤ b`` using Fractions.
+    """Convex polytope in H-representation ``A x ≤ b`` using rational arithmetic.
 
     Use :meth:`Polytope.from_hrep` or :meth:`Polytope.from_vrep` to build an
     instance. Call :meth:`extreme` to compute and cache vertices (V-rep).
@@ -104,6 +104,7 @@ class Polytope:
     # ---------- Properties ----------
     @property
     def dim(self) -> int:
+        """Dimension of the ambient space."""
         return self._dim
 
     @property

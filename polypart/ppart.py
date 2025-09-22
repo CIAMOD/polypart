@@ -46,10 +46,23 @@ class PartitionNode:
 
 @dataclass
 class PartitionTree:
+    """
+    Binary tree representing a recursive partition of a polytope.
+    Args:
+        root: root PartitionNode of the tree.
+        n_regions: number of leaf regions (partitions).
+    """
+
     root: PartitionNode
     n_regions: int
 
     def classify(self, x: FractionVector) -> PartitionNode:
+        """Classify point x into one of the leaf regions.
+        Args:
+            x (FractionVector): point to classify.
+        Returns:
+            PartitionNode: leaf node containing x.
+        """
         return self.root.classify(x)
 
 
@@ -75,16 +88,18 @@ def choose_best_split(polytope: Polytope, candidates: Sequence[Hyperplane]) -> T
         return None, None, None
     # Choose uniformly at random among intersecting hyperplanes
     b_i = int(np.random.choice(idxs))
-    h = candidates[b_i]
-    children = polytope.split_by_hyperplane(h)
+    b_hyp = candidates[b_i]
+    children = polytope.split_by_hyperplane(b_hyp)
     remaining = [candidates[i] for i in idxs if i != b_i]
-    return h, children, remaining
+    return b_hyp, children, remaining
 
 
 def build_partition_tree(
     polytope: Polytope, hyperplanes: Sequence[Hyperplane]
 ) -> Tuple[PartitionTree, int]:
-    """Build a partition tree by recursively splitting a polytope.
+    """Build a partition tree by recursively splitting a polytope with a set of
+    hyperplanes. The splitting hyperplane at each node is chosen randomly among the
+    candidate hyperplanes that intersect the polytope.
 
     Args:
         polytope (Polytope): initial polytope to partition.
@@ -94,9 +109,9 @@ def build_partition_tree(
         Tuple[PartitionTree, int]: the constructed tree and the number of
         leaf regions.
 
-    Notes:
-        To control randomness, set the module RNG (e.g. via
-        ``set_global_seed``) before calling.
+    Note:
+        Set np.random.seed(...) before calling this function to ensure
+        reproducibility of the partitioning.
     """
     if polytope._vertices is None:
         polytope.extreme()
@@ -106,10 +121,10 @@ def build_partition_tree(
     prev_partitions = 0
     while stack:
         node = stack.pop()
-        h, children, remaining_candidates = choose_best_split(
+        b_hyp, children, remaining_candidates = choose_best_split(
             node.polytope, node.candidates
         )
-        if h is None:
+        if b_hyp is None:
             node.centroid  # force compute only when leaf
             node._id = n_partitions
             n_partitions += 1
@@ -117,7 +132,7 @@ def build_partition_tree(
                 print(f"Found {n_partitions} chambers...")
                 prev_partitions = n_partitions
         else:
-            node.cut = h
+            node.cut = b_hyp
             for child_poly in children:  # type: ignore
                 child = node.add_child(
                     child_poly,
