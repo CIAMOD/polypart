@@ -1,7 +1,8 @@
 [project]
 name = "polypart"
 version = "0.1.5"
-description = "Robust convex polytope partitioning with exact arithmetic and efficient point classification."
+description = "Robust polytope partitioning and efficient point classification in Python"
+keywords = ["polytope", "partition", "classification", "decision tree", "exact arithmetic", "computational geometry"]
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
