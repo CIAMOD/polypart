@@ -85,9 +85,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👥 Authors
 
 - ***Sergio Herreros Pérez***, Graduate in Mathematical Engineering and Artificial Intelligence, ICAI, Comillas Pontifical University
-- ***José Portela González***, Department of Quantitative Methods, Comillas Pontifical University
+- ***José Portela González***, Department of Quantitative Methods and Institute for Research in Technology, ICADE, Comillas Pontifical University
 - ***David Alfaya Sánchez***, Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
-- ***Jaime Pizarroso Gonzalo***, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University
+- ***Jaime Pizarroso Gonzalo***, Department of Telematics and Computing and Institute for Research and Technology, ICAI, Comillas Pontifical University, and Santalucía Chair of Analytics for Education.
 
 ## 🙌 Acknowledgments
 
@@ -110,3 +110,5 @@ Special thanks to everyone who contributed to the project:
 
 ## 📚 References
 
+- *David Alfaya, Sergio Herreros, Jaime Pizarroso, José Portela, and Javier Rodrigo*, **"A Computational Analysis of Moduli Spaces of Parabolic Vector Bundles"**, *in preparation*, 2025.
+- *David Alfaya, Sergio Herreros, Jaime Pizarroso and José Portela*, **"PolyPart: Exact Partitioning of Convex Polytopes"**, *in preparation*, 2025.
