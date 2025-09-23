@@ -60,7 +60,7 @@ from polypart.io import save_tree
 A = [[-1, 0], [1, 0], [0, -1], [0, 1]]
 b = [0, 1, 0, 1]
 square = Polytope(A, b) # expressed as A x <= b
-square.extreme()  # compute vertices (V-representation)
+square.extreme()  # compute vertices (Optional)
 
 h1 = Hyperplane.from_coefficients([1, 0, Fraction(1, 3)]) # x = 1/3
 h2 = Hyperplane.from_coefficients([0, 1, Fraction(1, 3)]) # y = 1/3
