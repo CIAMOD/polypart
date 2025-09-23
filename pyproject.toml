@@ -2,7 +2,7 @@
 name = "polypart"
 version = "0.1.5"
 description = "Robust polytope partitioning and efficient point classification in Python"
-keywords = ["polytope", "partition", "classification", "decision tree", "exact arithmetic", "computational geometry"]
+keywords = ["polytope", "partition", "hyperplane arrangement", "point location", "decision tree"]
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -14,6 +14,10 @@ dependencies = [
     "numpy>=1.24.4",
     "pycddlib>=3.0.2",
 ]
+license = { file = "LICENSE" }
+
+[project.urls]
+"Repository" = "https://github.com/CIAMOD/polypart"
 
 [build-system]
 requires = ["setuptools>=78.1.0", "wheel>=0.45.1"]
@@ -29,7 +33,6 @@ explicit = true
 max-line-length = 88
 extend-ignore = ["E203", "W503"]
 
-# pyproject.toml
 [tool.setuptools.packages.find]
 include = ["polypart*"]
 exclude = ["tests*", "examples*", "data*", "images*"]

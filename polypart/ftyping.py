@@ -1,11 +1,14 @@
 from __future__ import annotations
 from fractions import Fraction
-from typing import TypeAlias, Iterable, Union
+from typing import TypeAlias, Iterable, Union, Literal
 import numpy as np
 
 
 # Include numpy scalar numeric types so they are accepted as "number-like"
 NumberLike = Union[int, float, Fraction, np.integer, np.floating]
+
+# Strategy type for hyperplane selection
+SplitStrategy: TypeAlias = Literal["random", "v-entropy"]
 
 FractionVector: TypeAlias = np.ndarray
 """A 1D numpy array of dtype=object, containing Fraction objects. Shape: (d,)"""

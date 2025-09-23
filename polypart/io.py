@@ -95,8 +95,10 @@ def save_tree(root: PartitionTree, path: str) -> None:
         tree_json["avg_depth"] += node.depth
         queue.extend(node.children)
 
-    if tree_json["n_nodes"] > 0:
-        tree_json["avg_depth"] = round(tree_json["avg_depth"] / tree_json["n_nodes"], 2)
+    if tree_json["n_partitions"] > 0:
+        tree_json["avg_depth"] = round(
+            tree_json["avg_depth"] / tree_json["n_partitions"], 2
+        )
     else:
         tree_json["avg_depth"] = 0
 

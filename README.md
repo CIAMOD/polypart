@@ -83,6 +83,16 @@ Complete Jupyter notebooks providing guided, reproducible demonstrations of how 
 - [**Moduli_Stability_Chambers.ipynb**](https://github.com/CIAMOD/polypart/tree/master/examples/Moduli_Stability_Chambers.ipynb)
   A higher-dimensional research application on moduli spaces of parabolic vector bundles.
 
+## 📝 Changelog
+
+### [Unreleased] - 2025-09-22
+
+- Added optimization strategy 'v-entropy' to `build_partition_tree` resulting in more balanced trees, faster point classification while still and shorter runtime for building the tree.
+- Added ´stats´ function to `PartitionTree` class to compute and return various statistics about the tree structure (e.g., number of nodes, average depth, max depth).
+- Fixed avg_depth calculation in `save_tree` function.
+- Improved documentation and expanded example "Moduli_Stability_Chambers.ipynb" comparing with both strategies.
+- Added `keywords` and `project.urls` to `pyproject.toml` for better PyPI metadata.
+
 
 ## 📜 License
 
