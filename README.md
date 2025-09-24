@@ -1,22 +1,11 @@
+[![PyPI](https://img.shields.io/pypi/v/polypart.svg)](https://pypi.org/project/polypart/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/polypart?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/polypart)
+[![Python](https://img.shields.io/badge/python-%5E3.10-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Repo](https://img.shields.io/static/v1?message=Repo&logo=github&labelColor=grey&color=black&logoColor=white&label=GitHub)](https://github.com/ciamod/polypart)
+
 <p align="left">
-  <a href="https://pypi.org/project/polypart/">
-    <img src="https://img.shields.io/pypi/v/polypart.svg" alt="PyPI">
-  </a>
-  <a href="https://pepy.tech/projects/polypart">
-    <img src="https://static.pepy.tech/badge/polypart" alt="">
-  </a>
-  <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-%5E3.10-blue" alt="Python">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
-  </a>
-  <a href="https://github.com/ciamod/polypart">
-    <img src="https://img.shields.io/badge/GitHub-Repo-black?logo=github" alt="GitHub Repo">
-  </a>
-</p>
-<p align="left">
-  <img width="465" alt="polypart-logo" src="https://raw.githubusercontent.com/CIAMOD/polypart/develop/images/polypart-logo.png" />
+  <img width="470" alt="polypart-logo" src="https://raw.githubusercontent.com/CIAMOD/polypart/develop/images/polypart-logo.png" />
 </p>
 
 PolyPart is a Python package for **partitioning d-dimensional convex polytopes** by affine hyperplane arrangements. The algorithm works by iteratively slicing the polytope with hyperplanes and organizing the resulting subdivisions into a **decision tree**, which enables:
@@ -91,7 +80,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👥 Authors
 
 - ***Sergio Herreros Pérez***, Institute for Research in Technology, ICAI, Comillas Pontifical University
-- ***José Portela González***, Department of Quantitative Methods and Institute for Research in Technology, ICADE, Comillas Pontifical University
+- ***José Portela González***, Department of Quantitative Methods, ICADE, Comillas Pontifical University and Institute for Research in Technology, IIT, Comillas Pontifical University
 - ***David Alfaya Sánchez***, Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
 - ***Jaime Pizarroso Gonzalo***, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University, and Santalucía Chair of Analytics for Education.
 

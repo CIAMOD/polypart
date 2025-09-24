@@ -70,6 +70,8 @@ def save_tree(root: PartitionTree, path: str) -> None:
     queue = [root.root if isinstance(root, PartitionTree) else root]
     while queue:
         node = queue.pop(0)
+        # count node
+        tree_json["n_nodes"] += 1
         # assign temporary index
         node.index = len(tree_json["tree"])
         tree_json["tree"].append(
@@ -88,15 +90,18 @@ def save_tree(root: PartitionTree, path: str) -> None:
                 ),
             }
         )
-        tree_json["n_nodes"] += 1
         if len(node.children) == 0:
             tree_json["n_partitions"] += 1
-        tree_json["max_depth"] = max(tree_json["max_depth"], node.depth)
-        tree_json["avg_depth"] += node.depth
+            tree_json["max_depth"] = max(tree_json["max_depth"], node.depth)
+            tree_json["avg_depth"] += node.depth
+
+        # enqueue children
         queue.extend(node.children)
 
-    if tree_json["n_nodes"] > 0:
-        tree_json["avg_depth"] = round(tree_json["avg_depth"] / tree_json["n_nodes"], 2)
+    if tree_json["n_partitions"] > 0:
+        tree_json["avg_depth"] = round(
+            tree_json["avg_depth"] / tree_json["n_partitions"], 2
+        )
     else:
         tree_json["avg_depth"] = 0
 

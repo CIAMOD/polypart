@@ -6,7 +6,7 @@ keywords = ["polytope", "partition", "hyperplane arrangement", "point location",
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "Sergio Herreros Pérez", email = "sergioherrerosp@gmail.com" },
+    { name = "Sergio Herreros Pérez", email = "sergio.herreros@alu.icai.comillas.edu" },
     { name = "David Alfaya Sánchez", email = "dalfaya@icai.comillas.edu"},
     { name = "Jaime Pizarroso Gonzalo", email = "jpizarroso@comillas.edu"} 
 ]
@@ -18,6 +18,18 @@ license = { file = "LICENSE" }
 
 [project.urls]
 "Repository" = "https://github.com/CIAMOD/polypart"
+"Changelog" = "https://github.com/CIAMOD/polypart/blob/master/CHANGELOG.md"
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries",
+]
 
 [build-system]
 requires = ["setuptools>=78.1.0", "wheel>=0.45.1"]
