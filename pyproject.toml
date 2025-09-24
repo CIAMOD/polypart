@@ -1,6 +1,6 @@
 [project]
 name = "polypart"
-version = "0.1.0"
+version = "0.1.1"
 description = "Robust polytope partitioning and efficient point classification in Python"
 keywords = ["polytope", "partition", "hyperplane arrangement", "point location", "decision tree"]
 readme = "README.md"
