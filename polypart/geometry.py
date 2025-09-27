@@ -26,6 +26,35 @@ class Hyperplane:
     normal: FractionVector
     offset: Fraction
 
+    def __post_init__(self):
+        # Validate types at runtime
+        if not isinstance(self.offset, Fraction):
+            raise TypeError(
+                f"offset must be Fraction, got {type(self.offset).__name__}. "
+                "Use Hyperplane.from_coefficients() instead."
+            )
+        if not isinstance(self.normal, np.ndarray):
+            raise TypeError(
+                "normal must be a numpy.ndarray with dtype=object containing Fractions. "
+                "Use Hyperplane.from_coefficients() instead."
+            )
+        elif self.normal.dtype != object:
+            raise TypeError(
+                "normal must be a numpy.ndarray with dtype=object containing Fractions. "
+                "Use Hyperplane.from_coefficients() instead."
+            )
+
+        # Check normal is non-empty and 1D
+        if self.normal.ndim != 1 or self.normal.size == 0:
+            raise ValueError("normal must be a non-empty 1D numpy array.")
+
+        # Check all elements are Fractions
+        if not all(isinstance(x, Fraction) for x in self.normal.flat):
+            raise TypeError(
+                "normal must contain only Fractions. "
+                "Use Hyperplane.from_coefficients() instead."
+            )
+
     @staticmethod
     def from_coefficients(
         coefficients: Iterable[NumberLike],
