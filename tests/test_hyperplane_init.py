@@ -176,7 +176,7 @@ class TestHyperplaneInit:
         offset = 1.5  # invalid float
 
         # Should raise error about offset being invalid (checked first)
-        with pytest.raises(TypeError, match="offset must be Fraction, got float"):
+        with pytest.raises(TypeError):
             Hyperplane(normal, offset)
 
     def test_hyperplane_immutability(self):

@@ -28,14 +28,14 @@ class Hyperplane:
 
     def __post_init__(self):
         # Validate types at runtime
-        if not isinstance(self.offset, Fraction):
-            raise TypeError(
-                f"offset must be Fraction, got {type(self.offset).__name__}. "
-                "Use Hyperplane.from_coefficients() instead."
-            )
         if not isinstance(self.normal, np.ndarray):
             raise TypeError(
                 "normal must be a numpy.ndarray with dtype=object containing Fractions. "
+                "Use Hyperplane.from_coefficients() instead."
+            )
+        if not isinstance(self.offset, Fraction):
+            raise TypeError(
+                f"offset must be Fraction, got {type(self.offset).__name__}. "
                 "Use Hyperplane.from_coefficients() instead."
             )
         elif self.normal.dtype != object:
@@ -59,10 +59,9 @@ class Hyperplane:
     def from_coefficients(
         coefficients: Iterable[NumberLike],
     ) -> """Hyperplane""":
-        """Create Hyperplane from coefficients [a1, ..., ad, b].
+        """Create Hyperplane a1*x1 + ... + ad*xd = b from coefficients [a1, ..., ad, b].
 
-        The last element is taken as the offset ``b`` and the preceding
-        elements form the normal vector.
+        The vector [a1, ..., ad] is the normal vector and b is the offset.
         """
         normal, offset = as_fraction_vector(coefficients[:-1]), to_fraction(
             coefficients[-1]
@@ -159,11 +158,6 @@ class Polytope:
             raise ValueError("Inequalities do not represent a bounded polytope.")
         self._vertices = V[:, 1:]
 
-    def is_degenerate(self) -> bool:
-        if self._vertices is None:
-            raise ValueError("Vertices needed. Call .extreme() first.")
-        return self._vertices.shape[0] < self._dim + 1
-
     def add_halfspace(self, halfspace: Hyperplane) -> """Polytope""":
         """Return a new Polytope obtained by adding an inequality.
 
@@ -234,9 +228,7 @@ class Polytope:
         vals = self.A @ x.reshape(-1, 1)
         return bool(np.all(vals.flatten() <= self.b.flatten()))
 
-    def intersecting_hyperplanes(
-        polytope: Polytope, hyperplanes: Iterable[Hyperplane]
-    ) -> np.ndarray:
+    def intersecting_hyperplanes(self, hyperplanes: Iterable[Hyperplane]) -> np.ndarray:
         """Return a boolean mask of hyperplanes intersecting the polytope.
 
         A hyperplane intersects the polytope iff there are vertices strictly
@@ -246,7 +238,7 @@ class Polytope:
         # A shape: (n_hyperplanes, dim)
         b = np.array([h.offset for h in hyperplanes], dtype=object)
         # b shape: (n_hyperplanes,)
-        values = polytope.vertices @ A.T
+        values = self.vertices @ A.T
         # shape (n_vertices, n_hyperplanes)
         less = np.any(values < b, axis=0)
         greater = np.any(values > b, axis=0)
