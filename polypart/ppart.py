@@ -172,14 +172,6 @@ def choose_best_split(
         - Tuple of two child polytopes (None if no valid split found)
         - List of remaining candidate hyperplanes (None if no valid split found)
 
-    Notes:
-        The v-entropy strategy approximates the Shannon entropy of a split by
-        computing the proportion of vertices on each side of each candidate
-        hyperplane. It selects the hyperplane that maximizes this entropy,
-        promoting more balanced splits.
-
-        For random strategy, np.random.seed(...) should be set before calling
-        to ensure reproducibility.
     """
     # Validate strategy parameter
     if strategy not in {"random", "v-entropy"}:
@@ -256,7 +248,6 @@ def build_partition_tree(
         - The polytope vertices are computed automatically if not already cached
         - For reproducible results with "random" strategy, set np.random.seed(...)
         - Progress is printed every 1000 partitions for long-running computations
-        - Memory is optimized by clearing polytope and candidate data from processed nodes
     """
     # Ensure vertices are computed for the polytope
     if polytope._vertices is None:

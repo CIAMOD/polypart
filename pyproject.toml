@@ -1,6 +1,6 @@
 [project]
 name = "polypart"
-version = "0.1.0"
+version = "0.2.0"
 description = "Robust polytope partitioning and efficient point classification in Python"
 keywords = ["polytope", "partition", "hyperplane arrangement", "point location", "decision tree"]
 readme = "README.md"
@@ -14,22 +14,21 @@ dependencies = [
     "numpy>=1.24.4",
     "pycddlib>=3.0.2",
 ]
-license = { file = "LICENSE" }
-
-[project.urls]
-"Repository" = "https://github.com/CIAMOD/polypart"
-"Changelog" = "https://github.com/CIAMOD/polypart/blob/master/CHANGELOG.md"
-
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries",
 ]
+
+[project.urls]
+"Repository" = "https://github.com/CIAMOD/polypart"
+"Changelog" = "https://github.com/CIAMOD/polypart/blob/master/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=78.1.0", "wheel>=0.45.1"]
