@@ -7,7 +7,7 @@ from typing import Iterable, Tuple, Optional
 import numpy as np
 import cdd.gmp
 
-from .ftyping import as_fraction_matrix, as_fraction_vector, to_fraction
+from .ftyping import as_fraction_matrix, as_fraction_vector, to_fraction, SplitStrategy
 from .ftyping import NumberLike, FractionVector, FractionMatrix
 
 
@@ -228,22 +228,61 @@ class Polytope:
         vals = self.A @ x.reshape(-1, 1)
         return bool(np.all(vals.flatten() <= self.b.flatten()))
 
-    def intersecting_hyperplanes(self, hyperplanes: Iterable[Hyperplane]) -> np.ndarray:
-        """Return a boolean mask of hyperplanes intersecting the polytope.
+    def intersecting_hyperplanes(
+        self,
+        hyperplanes: Iterable[Hyperplane],
+        strategy: SplitStrategy = "v-entropy",
+    ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray]]:
+        """Identify hyperplanes that intersect the polytope and count vertex distribution.
 
-        A hyperplane intersects the polytope iff there are vertices strictly
-        on both sides of the hyperplane.
+        A hyperplane intersects the polytope if and only if there are vertices strictly
+        on both sides of the hyperplane. For entropy-based strategies, this method also
+        computes the number of vertices on each side for entropy calculations.
+
+        Args:
+            hyperplanes: Iterable of hyperplanes to test for intersection.
+            strategy: Split strategy determining what additional information to compute:
+                - "v-entropy": Compute vertex counts on each side for entropy calculation
+                - "random": Only compute intersection mask (counts will be None)
+
+        Returns:
+            Tuple containing:
+            - np.ndarray: Boolean mask indicating which hyperplanes intersect the polytope
+            - Optional[np.ndarray]: Number of vertices on the "less than" side of each hyperplane
+              (None if strategy is "random")
+            - Optional[np.ndarray]: Number of vertices on the "greater than" side of each hyperplane
+              (None if strategy is "random")
+
+        Notes:
+            The "less than" and "greater than" sides are defined relative to the hyperplane
+            equation normal·x ≤ offset. Vertices exactly on the hyperplane (normal·x = offset)
+            are not counted in either side, as they don't contribute to determining if the
+            hyperplane truly intersects the polytope interior.
         """
-        A = np.vstack([h.normal for h in hyperplanes])
-        # A shape: (n_hyperplanes, dim)
-        b = np.array([h.offset for h in hyperplanes], dtype=object)
-        # b shape: (n_hyperplanes,)
+        # Stack hyperplane normals and offsets for vectorized computation
+        A = np.vstack([h.normal for h in hyperplanes])  # Shape: (n_hyperplanes, dim)
+        b = np.array(
+            [h.offset for h in hyperplanes], dtype=object
+        )  # Shape: (n_hyperplanes,)
+
+        # Compute signed distances: vertices @ normals^T - offsets
+        # Shape: (n_vertices, n_hyperplanes)
         values = self.vertices @ A.T
-        # shape (n_vertices, n_hyperplanes)
-        less = np.any(values < b, axis=0)
-        greater = np.any(values > b, axis=0)
-        mask = np.logical_and(less, greater)
-        return np.asarray(mask, dtype=bool)
+
+        if strategy == "v-entropy":
+            # Count vertices on each side for entropy calculation
+            n_less = np.sum(values < b, axis=0)
+            n_greater = np.sum(values > b, axis=0)
+            # Hyperplane intersects if vertices exist on both sides
+            mask = np.logical_and(n_less > 0, n_greater > 0)
+        else:  # strategy == "random"
+            # Only determine intersection without counting
+            n_less, n_greater = None, None
+            less = np.any(values < b, axis=0)
+            greater = np.any(values > b, axis=0)
+            mask = np.logical_and(less, greater)
+
+        return np.asarray(mask, dtype=bool), n_less, n_greater
 
     # ---------- Pretty ----------
     def __repr__(self) -> str:

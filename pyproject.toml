@@ -45,7 +45,6 @@ explicit = true
 max-line-length = 88
 extend-ignore = ["E203", "W503"]
 
-# pyproject.toml
 [tool.setuptools.packages.find]
 include = ["polypart*"]
 exclude = ["tests*", "examples*", "data*", "images*"]
