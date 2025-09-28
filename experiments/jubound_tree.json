@@ -1,0 +1,389 @@
+{
+    "n_partitions": 26,
+    "n_nodes": 51,
+    "max_depth": 5,
+    "avg_depth": 3.92,
+    "tree": [
+        {
+            "depth": 0,
+            "cut_hyperplane": [
+                "[1, -1/5, 0]",
+                "0"
+            ],
+            "parent_idx": null,
+            "centroid": null
+        },
+        {
+            "depth": 1,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 0,
+            "centroid": null
+        },
+        {
+            "depth": 1,
+            "cut_hyperplane": [
+                "[-4, 3, -1]",
+                "0"
+            ],
+            "parent_idx": 0,
+            "centroid": null
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 1,
+            "centroid": null
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": [
+                "[-4, 3, -1]",
+                "0"
+            ],
+            "parent_idx": 1,
+            "centroid": null
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 2,
+            "centroid": null
+        },
+        {
+            "depth": 2,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 2,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[-4, 3, -1]",
+                "0"
+            ],
+            "parent_idx": 3,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": null,
+            "parent_idx": 3,
+            "centroid": "[1631/22080, 6373/8280, 1519/1656]"
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 4,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 4,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 5,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 5,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 6,
+            "centroid": null
+        },
+        {
+            "depth": 3,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 6,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": null,
+            "parent_idx": 7,
+            "centroid": "[3/188, 381/3008, 8913/21056]"
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 7,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 9,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 9,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 10,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, -1/5, 1]",
+                "7/10"
+            ],
+            "parent_idx": 10,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 11,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 11,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 12,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[0, 9/5, 3/5]",
+                "1"
+            ],
+            "parent_idx": 12,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": null,
+            "parent_idx": 13,
+            "centroid": "[4941917/61216560, 457687/1530414, 250235/510138]"
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": null,
+            "parent_idx": 13,
+            "centroid": "[8515439/132635880, 4249471/13263588, 1555675/2210598]"
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 14,
+            "centroid": null
+        },
+        {
+            "depth": 4,
+            "cut_hyperplane": [
+                "[-1, -1, 7/5]",
+                "3/5"
+            ],
+            "parent_idx": 14,
+            "centroid": null
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 16,
+            "centroid": "[2299/76140, 121477/426384, 70421/142128]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 16,
+            "centroid": "[30191/596160, 15569/29808, 6883/9936]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 17,
+            "centroid": "[131863/4692480, 24655/117312, 229639/342160]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 17,
+            "centroid": "[14413/249600, 3977/12480, 15579/20800]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 18,
+            "centroid": "[407/23040, 227/1152, 1633/1920]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 18,
+            "centroid": "[47873/1267200, 19517/63360, 8549/9600]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 19,
+            "centroid": "[3620179/126696960, 924749/3167424, 23141/32994]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 19,
+            "centroid": "[7/768, 163/576, 149/192]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 20,
+            "centroid": "[12298103/310003200, 5560337/15500160, 19228259/25833600]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 20,
+            "centroid": "[501923/12144000, 806479/1821600, 721381/828000]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 21,
+            "centroid": "[93529621/584958240, 553297/2166512, 224436929/409470768]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 21,
+            "centroid": "[537766817/6759517440, 150877007/675951744, 16279363001/23658311040]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 22,
+            "centroid": "[5857621/18266880, 296779/608896, 1275557/1826688]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 22,
+            "centroid": "[77220223/890510400, 29482129/89051040, 332317009/445255200]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 23,
+            "centroid": "[205833/853120, 70681/255936, 65967/85312]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 23,
+            "centroid": "[1498527/3521600, 127297/211296, 312611/352160]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 24,
+            "centroid": "[42233/341248, 297355/1535616, 724403/853120]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 24,
+            "centroid": "[31545071/193688000, 61422617/174319200, 7832883/8804000]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 27,
+            "centroid": "[860876609/5671866240, 71414203/141796656, 32801081/47265552]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 27,
+            "centroid": "[5117353081/69125869800, 2438166833/6912586980, 4266208393/5760489150]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 28,
+            "centroid": "[716051/3135360, 285149/391920, 23877/26128]"
+        },
+        {
+            "depth": 5,
+            "cut_hyperplane": null,
+            "parent_idx": 28,
+            "centroid": "[3639893/32333400, 1549363/3233340, 72543/81650]"
+        }
+    ]
+}

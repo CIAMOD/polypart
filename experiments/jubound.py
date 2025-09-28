@@ -1,5 +1,10 @@
-from polypart import Polytope, Hyperplane, build_partition_tree
+from polypart import Polytope, Hyperplane, build_partition_tree, save_tree
+from polypart.ftyping import as_fraction_vector
 import numpy as np
+from math import gcd
+from functools import reduce
+
+np.random.seed(1)
 
 
 def get_simplex_inequalities(n: int, r: int):
@@ -15,11 +20,6 @@ def get_simplex_inequalities(n: int, r: int):
     return A, b
 
 
-# Define a function to take in a polytope and return m number of hyperplanes
-# intersecting it. For that, generate 3 points uniformly at random from the polytope,
-# and then return the hyperplane defined by these 3 points.
-
-
 def sample_point_in_polytope(polytope: Polytope) -> np.ndarray:
     """Sample a point uniformly at random from the polytope using rejection sampling."""
     # Get bounding box of the polytope
@@ -29,27 +29,70 @@ def sample_point_in_polytope(polytope: Polytope) -> np.ndarray:
     while True:
         # Sample a random point in the bounding box
         point = np.random.uniform(mins, maxs)
+        # Check if the point is in the polytope
         if polytope.contains(point):
             return point
+
+
+def compute_hyperplane_from_points(
+    points: np.ndarray,
+) -> tuple[np.ndarray, float] | None:
+    """
+    Compute hyperplane from d points in d-dimensional space.
+    Returns (normal, offset) or None if degenerate.
+    """
+    P = np.asarray(points, dtype=float)
+
+    if P.ndim != 2 or P.shape[0] != P.shape[1]:
+        raise ValueError("points must be a (d, d) array: d points in d-D space")
+
+    p0 = P[0]
+    V = P[1:] - p0  # (d-1, d); rows span the hyperplane
+    if np.linalg.matrix_rank(V) < P.shape[1] - 1:
+        return None
+
+    _, _, vh = np.linalg.svd(V)
+    normal = vh[-1]
+    norm = np.linalg.norm(normal)
+    if norm == 0:
+        return None
+
+    normal /= norm
+    offset = float(normal @ p0)
+
+    # Round normal and offset to get prettier numbers
+    normal = np.round(normal, decimals=1)
+    offset = np.round(offset, decimals=1)
+
+    return normal, offset
 
 
 def get_intersecting_hyperplanes(polytope: Polytope, m: int) -> list[Hyperplane]:
     hyperplanes = []
     dim = polytope.A.shape[1]
-    for _ in range(m):
+    while len(hyperplanes) < m:
         points = np.array([sample_point_in_polytope(polytope) for _ in range(dim)])
-        if dim == 2:
-            p1, p2 = points[0], points[1]
-            normal = np.array([p2[1] - p1[1], p1[0] - p2[0]])
-            offset = normal @ p1
-            hyperplanes.append(Hyperplane(normal, offset))
-        elif dim == 3:
-            p1, p2, p3 = points[0], points[1], points[2]
-            normal = np.cross(p2 - p1, p3 - p1)
-            offset = normal @ p1
-            hyperplanes.append(Hyperplane(normal, offset))
-        else:
-            raise ValueError("Dimension not supported")
+        result = compute_hyperplane_from_points(points)
+        if result is None:
+            print("Degenerate points, resampling...")
+            continue  # Degenerate points, resample
+
+        normal, offset = result
+        hyperplane = Hyperplane.from_coefficients(np.append(normal, offset))
+
+        if not polytope.intersecting_hyperplanes([hyperplane])[0]:
+            continue  # Does not intersect, resample
+
+        hyperplanes.append(hyperplane)
+
+    # Find gcd of all coefficients denominators and multiply all coefficients by it
+    for i, h in enumerate(hyperplanes):
+        coeffs = np.append(h.normal, h.offset)
+        denominators = [frac.denominator for frac in coeffs if frac != 0]
+        common_denom = reduce(gcd, denominators)
+        new_coeffs = coeffs * common_denom
+        hyperplanes[i] = Hyperplane.from_coefficients(new_coeffs)
+
     return hyperplanes
 
 
@@ -73,8 +116,7 @@ if __name__ == "__main__":
         )
     print(f"Generated {len(hyperplanes)} hyperplanes intersecting the polytope.")
 
-    tree = build_partition_tree(polytope, hyperplanes)
-    leaves = tree.get_leaves()
-    print(f"Partitioned into {len(leaves)} polytopes.")
-    for i, leaf in enumerate(leaves):
-        print(f"Polytope {i} has {len(leaf.vertices)} vertices.")
+    tree, n_partitions = build_partition_tree(polytope, hyperplanes)
+    print(f"Polytope partitioned into {n_partitions} regions.")
+
+    save_tree(tree, "experiments/jubound_tree.json")
