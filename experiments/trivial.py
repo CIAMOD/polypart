@@ -2,63 +2,8 @@ from polypart import Polytope, Hyperplane, build_partition_tree
 import numpy as np
 from time import perf_counter
 from jubound import get_intersecting_hyperplanes
-import itertools
-import math
 import matplotlib.pyplot as plt
-
-
-def get_simplex_inequalities(n: int, r: int):
-    A = np.zeros((n * (r + 1), n * r), dtype=int)
-    b = np.zeros(n * (r + 1), dtype=int)
-    for i in range(n):
-        for j in range(r):
-            A[i * (r + 1) + j, i * r + j] = -1
-            A[i * (r + 1) + j + 1, i * r + j] = 1
-    for i in range(n):
-        b[i * (r + 1) : (i + 1) * (r + 1)] = 0
-        b[i * (r + 1) + r] = 1
-    return A, b
-
-
-def generate_admissible_matrices_fixed_r_prime(
-    n: int, r: int, r_prime: int, remove_even_symetry: bool = False
-):
-    combs = itertools.combinations(range(r), r_prime)
-    variations = itertools.product(combs, repeat=n)
-    N = math.comb(r, r_prime) ** n
-    for i, variation in enumerate(variations):
-        if remove_even_symetry and r == 2 * r_prime and i >= N // 2:
-            return
-        n_ = np.zeros((n, r), dtype=int)
-        for ii in range(n):
-            for jj in variation[ii]:
-                n_[ii, jj] = 1
-        yield n_
-
-
-def get_plane_intercept_bounds(w: np.ndarray):
-    w = w[:, ::-1]
-    cumsums = np.cumsum(w, axis=1)
-    cumsums = np.hstack((np.zeros_like(cumsums[:, :1]), cumsums))
-    lower_bound = cumsums.min(axis=1).sum()
-    upper_bound = cumsums.max(axis=1).sum()
-    return lower_bound, upper_bound
-
-
-def get_planes(n: int, r: int, d: int, use_epsilons=False):
-    planes = []
-    for r_prime in range(1, r // 2 + 1):
-        new_planes = []
-        for n_ in generate_admissible_matrices_fixed_r_prime(n, r, r_prime, True):
-            if use_epsilons:
-                n_ = n_[:, 1:]
-            v = r_prime - r * n_.flatten()
-            lower, upper = get_plane_intercept_bounds(r_prime - r * n_)
-            ks2 = [kp for kp in range(lower + 1, upper) if (kp + r_prime * d) % r == 0]
-            if len(ks2) > 0:
-                new_planes.append((v, ks2))
-        planes += new_planes
-    return planes
+from moduli import *
 
 
 def get_partitions(polytope: Polytope, hyperplanes: list[Hyperplane]):
@@ -97,8 +42,9 @@ def compare_algorithms(
     print(f"Generated {len(hyperplanes)} hyperplanes intersecting the polytope.")
 
     n_hyperplanes_list = list(range(min_n_hyperplanes, max_n_hyperplanes + 1, step))
-    times_partition = []
-    times_tree = []
+    times_trivial = []
+    times_tree_random = []
+    times_tree_ventropy = []
     n_partitions_list = []
 
     for n_hyperplanes in n_hyperplanes_list:
@@ -107,23 +53,42 @@ def compare_algorithms(
         start = perf_counter()
         partitions = get_partitions(polytope, selected_hyperplanes)
         end = perf_counter()
-        times_partition.append(end - start)
+        times_trivial.append(end - start)
 
         start = perf_counter()
-        _, n_partitions = build_partition_tree(polytope, selected_hyperplanes)
+        _, n_partitions = build_partition_tree(polytope, selected_hyperplanes, "random")
         end = perf_counter()
-        times_tree.append(end - start)
+        times_tree_random.append(end - start)
+
+        start = perf_counter()
+        _, n_partitions = build_partition_tree(
+            polytope, selected_hyperplanes, "v-entropy"
+        )
+        end = perf_counter()
+        times_tree_ventropy.append(end - start)
 
         n_partitions_list.append(len(partitions))
 
         print(
             f"n_hyperplanes: {n_hyperplanes}, n_partitions: {len(partitions)}, "
-            f"partition_time: {times_partition[-1]:.4f}s, tree_time: {times_tree[-1]:.4f}s"
+            f"partition_time: {times_trivial[-1]:.4f}s, tree_time: {times_tree_random[-1]:.4f}s"
+            f", tree_ventropy_time: {times_tree_ventropy[-1]:.4f}s"
         )
 
     plt.figure(figsize=(10, 6))
-    plt.plot(n_hyperplanes_list, times_partition, label="Trivial Algorithm", marker="o")
-    plt.plot(n_hyperplanes_list, times_tree, label="Tree Algorithm", marker="o")
+    plt.plot(n_hyperplanes_list, times_trivial, label="Trivial Algorithm", marker="o")
+    plt.plot(
+        n_hyperplanes_list,
+        times_tree_random,
+        label="Tree Algorithm (Random)",
+        marker="o",
+    )
+    plt.plot(
+        n_hyperplanes_list,
+        times_tree_ventropy,
+        label="Tree Algorithm (V-Entropy)",
+        marker="o",
+    )
     plt.xlabel("Number of Hyperplanes")
     plt.ylabel("Time (seconds)")
     plt.title(f"Performance Comparison of Partitioning Algorithms (dim={dim})")
@@ -138,8 +103,10 @@ def compare_algorithms(
     plt.xlabel("Number of Hyperplanes")
     plt.ylabel("Number of Partitions")
     plt.title(f"Number of Partitions vs Number of Hyperplanes (dim={dim})")
-    plt.legend
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 if __name__ == "__main__":
-    compare_algorithms(dim=5, min_n_hyperplanes=3, max_n_hyperplanes=21, step=3)
+    compare_algorithms(dim=4, min_n_hyperplanes=1, max_n_hyperplanes=30, step=5)
