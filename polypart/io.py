@@ -1,13 +1,15 @@
+"""Functions to save and load PartitionTree objects to/from JSON files."""
+
 from __future__ import annotations
 
 import json
 import os
-from fractions import Fraction
 
 import numpy as np
 
-from .ppart import PartitionNode, PartitionTree
+from .ftyping import Fraction
 from .geometry import Hyperplane
+from .ppart import PartitionNode, PartitionTree
 
 
 def _frac_to_str(x: Fraction) -> str:
@@ -53,7 +55,7 @@ def str_to_vector(s: str) -> np.ndarray:
 
 
 def save_tree(root: PartitionTree, path: str) -> None:
-    """Save a PartitionTree to a JSON file.
+    """Save a PartitionTree to a JSON file alog with structural statistics.
 
     Args:
         root: PartitionTree or root PartitionNode to serialize.
@@ -83,11 +85,7 @@ def save_tree(root: PartitionTree, path: str) -> None:
                     else None
                 ),
                 "parent_idx": node.parent.index if node.parent is not None else None,
-                "centroid": (
-                    vector_to_str(node.centroid_)
-                    if node.centroid_ is not None
-                    else None
-                ),
+                "centroid": (vector_to_str(node.centroid) if node.is_leaf else None),
             }
         )
         if len(node.children) == 0:
@@ -105,12 +103,12 @@ def save_tree(root: PartitionTree, path: str) -> None:
     else:
         tree_json["avg_depth"] = 0
 
-    OUT_FOLDER = os.path.dirname(path) or "."
-    if not os.path.exists(OUT_FOLDER):
-        os.makedirs(OUT_FOLDER, exist_ok=True)
+    out_folder = os.path.dirname(path) or "."
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder, exist_ok=True)
 
     out_path = path
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(tree_json, f, indent=4)
 
 
@@ -124,8 +122,9 @@ def load_tree(path: str) -> PartitionTree:
         Reconstructed PartitionTree. Polytope and candidate fields are left
         as ``None`` (only structural data required for classification is
         restored).
+        Dictionary of structural statistics stored in the JSON file.
     """
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     nodes = []
@@ -136,7 +135,7 @@ def load_tree(path: str) -> PartitionTree:
         )
         # centroid
         if n.get("centroid") is not None:
-            node.centroid_ = str_to_vector(n["centroid"])
+            node._centroid = str_to_vector(n["centroid"])
         # cut
         ch = n.get("cut_hyperplane")
         if ch is not None:
@@ -145,6 +144,9 @@ def load_tree(path: str) -> PartitionTree:
             node.cut = Hyperplane(normal, offset)
         nodes.append(node)
 
+    if len(nodes) == 0:
+        raise ValueError("Loaded tree has no nodes.")
+
     # second pass: wire parent/children
     for idx, n in enumerate(data.get("tree", [])):
         parent_idx = n.get("parent_idx")
@@ -152,10 +154,4 @@ def load_tree(path: str) -> PartitionTree:
             nodes[idx].parent = nodes[parent_idx]
             nodes[parent_idx].children.append(nodes[idx])
 
-    root = (
-        nodes[0]
-        if nodes
-        else PartitionNode(polytope=None, candidates=None, parent=None, depth=0)
-    )
-    n_regions = data.get("n_partitions", 0)
-    return PartitionTree(root, n_regions)
+    return PartitionTree(nodes[0])

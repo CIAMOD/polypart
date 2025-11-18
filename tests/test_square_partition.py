@@ -1,6 +1,5 @@
-from polypart.geometry import Polytope, Hyperplane
+from polypart.geometry import Hyperplane, Polytope
 from polypart.ppart import build_partition_tree
-from polypart.io import save_tree
 
 
 def test_square_partition_4_cells():
@@ -13,7 +12,8 @@ def test_square_partition_4_cells():
     # two axis-aligned hyperplanes: x = 0.2 and y = 0.2
     h1 = Hyperplane.from_coefficients([1, 0, 0.2])
     h2 = Hyperplane.from_coefficients([0, 1, 0.2])
+    h3 = Hyperplane.from_coefficients([-1, 1, 0.0])
 
-    tree, n_partitions = build_partition_tree(square, [h1, h2])
+    _, n_partitions = build_partition_tree(square, [h1, h2, h3])
 
-    assert n_partitions == 4
+    assert n_partitions == 6

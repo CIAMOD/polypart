@@ -1,17 +1,25 @@
+"""Geometry classes for polytopes and hyperplanes using rational arithmetic."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from fractions import Fraction
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Optional, Tuple
 
-import numpy as np
 import cdd.gmp
+import numpy as np
 
-from .ftyping import as_fraction_matrix, as_fraction_vector, to_fraction, SplitStrategy
-from .ftyping import NumberLike, FractionVector, FractionMatrix
+from .ftyping import (
+    Fraction,
+    FractionMatrix,
+    FractionVector,
+    NumberLike,
+    SplitStrategy,
+    as_fraction_matrix,
+    as_fraction_vector,
+    to_fraction,
+)
 
 
-@dataclass(frozen=True)
 class Hyperplane:
     """Affine hyperplane boundary.
 
@@ -23,37 +31,9 @@ class Hyperplane:
         offset (Fraction): scalar offset.
     """
 
-    normal: FractionVector
-    offset: Fraction
-
-    def __post_init__(self):
-        # Validate types at runtime
-        if not isinstance(self.normal, np.ndarray):
-            raise TypeError(
-                "normal must be a numpy.ndarray with dtype=object containing Fractions. "
-                "Use Hyperplane.from_coefficients() instead."
-            )
-        if not isinstance(self.offset, Fraction):
-            raise TypeError(
-                f"offset must be Fraction, got {type(self.offset).__name__}. "
-                "Use Hyperplane.from_coefficients() instead."
-            )
-        elif self.normal.dtype != object:
-            raise TypeError(
-                "normal must be a numpy.ndarray with dtype=object containing Fractions. "
-                "Use Hyperplane.from_coefficients() instead."
-            )
-
-        # Check normal is non-empty and 1D
-        if self.normal.ndim != 1 or self.normal.size == 0:
-            raise ValueError("normal must be a non-empty 1D numpy array.")
-
-        # Check all elements are Fractions
-        if not all(isinstance(x, Fraction) for x in self.normal.flat):
-            raise TypeError(
-                "normal must contain only Fractions. "
-                "Use Hyperplane.from_coefficients() instead."
-            )
+    def __init__(self, normal: Iterable[NumberLike], offset: NumberLike) -> None:
+        self.normal: FractionVector = as_fraction_vector(normal)
+        self.offset: Fraction = to_fraction(offset)
 
     @staticmethod
     def from_coefficients(
@@ -63,13 +43,22 @@ class Hyperplane:
 
         The vector [a1, ..., ad] is the normal vector and b is the offset.
         """
-        normal, offset = as_fraction_vector(coefficients[:-1]), to_fraction(
-            coefficients[-1]
+        normal, offset = (
+            as_fraction_vector(coefficients[:-1]),
+            to_fraction(coefficients[-1]),
         )
         return Hyperplane(normal, offset)
 
-    def as_tuple(self) -> Tuple[FractionVector, Fraction]:
-        return self.normal, self.offset
+    def flip(self) -> """Hyperplane""":
+        """Return a new Hyperplane with normal and offset negated."""
+        # Avoid init checks by directly creating instance
+        hyperplane = Hyperplane.__new__(Hyperplane)
+        hyperplane.normal = -self.normal
+        hyperplane.offset = -self.offset
+        return hyperplane
+
+    def __repr__(self) -> str:
+        return f"Hyperplane(normal=[{' '.join(str(a) for a in self.normal)}], offset={self.offset})"
 
 
 class Polytope:
@@ -108,6 +97,31 @@ class Polytope:
         return cls(A, b)
 
     @classmethod
+    def _from_fraction_hrep(
+        cls,
+        A: FractionMatrix,
+        b: FractionVector,
+    ) -> "Polytope":
+        """Construct a Polytope from an H-rep that is already a FractionMatrix.
+
+        A: numpy.ndarray of Fractions with shape (m, d)
+        b: numpy.ndarray of Fractions with shape (m,) or (m, 1)
+        """
+        b = b.reshape(-1, 1)
+        if A.shape[0] != b.shape[0]:
+            raise ValueError(
+                f"A and b incompatible: got A.shape={A.shape}, b.shape={b.shape}"
+            )
+
+        # Allocate instance without calling __init__
+        self = cls.__new__(cls)
+        self.A = A
+        self.b = b
+        self._vertices = None
+        self._dim = A.shape[1]
+        return self
+
+    @classmethod
     def from_vrep(cls, V: Iterable[Iterable[NumberLike]]) -> """Polytope""":
         """Construct a Polytope from vertices by converting to H-rep via cdd.
 
@@ -141,6 +155,14 @@ class Polytope:
             raise ValueError("Vertices not computed yet. Call .extreme() first.")
         return self._vertices
 
+    @vertices.setter
+    def vertices(self, V: FractionMatrix) -> None:
+        if not isinstance(V, np.ndarray) or V.dtype != object:
+            raise TypeError(
+                "V must be a numpy.ndarray with dtype=object containing Fractions."
+            )
+        self._vertices = V
+
     # ---------- Operations ----------
     def extreme(self) -> None:
         """Compute exact vertices with cdd and cache the V-representation.
@@ -151,27 +173,39 @@ class Polytope:
         mat = cdd.gmp.matrix_from_array(np.hstack([self.b, -self.A]))
         mat.rep_type = cdd.gmp.RepType.INEQUALITY
         polyhedron = cdd.gmp.polyhedron_from_matrix(mat)
-        V = np.array(cdd.gmp.copy_generators(polyhedron).array, dtype=object)
+        # Convert to .ftyping.FractionMatrix
+        V = as_fraction_matrix(cdd.gmp.copy_generators(polyhedron).array)
         if V.size == 0:
             raise ValueError("Empty vertex set. The H-rep might be infeasible.")
         if not np.all([v == Fraction(1) for v in V[:, 0]]):
             raise ValueError("Inequalities do not represent a bounded polytope.")
         self._vertices = V[:, 1:]
 
-    def add_halfspace(self, halfspace: Hyperplane) -> """Polytope""":
+    def add_halfspace(
+        self,
+        halfspace: Hyperplane,
+        remove_redundancies: bool = True,
+        hv: Optional[np.ndarray] = None,
+    ) -> """Polytope""":
         """Return a new Polytope obtained by adding an inequality.
 
         Args:
             halfspace: Hyperplane to add as an inequality (normal · x ≤ offset).
+            remove_redundancies: whether to remove redundant inequalities after adding.
+            hv: Precomputed vertex values on the halfspace normal (optional).
 
         Returns:
             New Polytope with the extra inequality appended to H-rep.
         """
-        A = np.concatenate((self.A, halfspace.normal[None, :]), axis=0)
+        if remove_redundancies:
+            A_keep, b_keep = self.filter_inequalities(halfspace, hv=hv)
+        else:
+            A_keep, b_keep = self.A, self.b
+        A = np.concatenate((A_keep, halfspace.normal[None, :]), axis=0)
         b = np.concatenate(
-            (self.b, np.array([[halfspace.offset]], dtype=object)), axis=0
+            (b_keep, np.array([[halfspace.offset]], dtype=object)), axis=0
         ).reshape(-1)
-        return Polytope(A, b)
+        return Polytope._from_fraction_hrep(A, b)
 
     def remove_redundancies(self) -> """Polytope""":
         """Remove redundant inequalities from H-representation using cdd."""
@@ -182,8 +216,28 @@ class Polytope:
             self.b = np.delete(self.b, redundant_rows, axis=0)
         return self
 
+    def filter_inequalities(
+        self, cut_hyperplane: Hyperplane, hv: Optional[np.ndarray] = None
+    ) -> tuple[FractionMatrix, FractionVector]:
+        """
+        Assume the polytope was non-degenerate before adding the cut_hyperplane.
+        Remove inequalities that are redundant after adding the cut_hyperplane.
+        For each inequality a_i · x ≤ b_i, check if there exists a vertex v
+        such that a_i · v = b_i and cut_hyperplane.normal · v < cut_hyperplane.offset.
+        """
+        if self._vertices is None:
+            raise ValueError("Vertices not computed yet. Call .extreme() first.")
+        lvertices = self._vertices[hv < cut_hyperplane.offset]
+        values = lvertices @ self.A.T  # Shape: (n_lvertices, n_inequalities)
+        to_keep = []
+        for i in range(self.A.shape[0]):
+            # If any vertex satisfies the inequality at equality, it's not redundant
+            if np.any(values[:, i] == self.b[i, 0]):
+                to_keep.append(i)
+        return self.A[to_keep, :], self.b[to_keep, :]
+
     def split_by_hyperplane(
-        self, hyperplane: Hyperplane
+        self, hyperplane: Hyperplane, remove_redundancies: bool = False
     ) -> tuple["Polytope", "Polytope"]:
         """Split the polytope by a hyperplane.
 
@@ -193,23 +247,25 @@ class Polytope:
         Returns:
             Tuple of two Polytopes, one for each side of the hyperplane.
         """
+        hv = self.vertices @ hyperplane.normal
         # First child: intersection with halfspace (normal · x ≤ offset)
-        left = self.add_halfspace(hyperplane)
+        left = self.add_halfspace(
+            hyperplane, remove_redundancies=remove_redundancies, hv=hv
+        )
         left.extreme()
 
         # Second child: intersection with complement halfspace (normal · x ≥ offset)
-        complement_hyperplane = Hyperplane(-hyperplane.normal, -hyperplane.offset)
-        right = self.add_halfspace(complement_hyperplane)
+        complement_hyperplane = hyperplane.flip()
+        right = self.add_halfspace(
+            complement_hyperplane, remove_redundancies=remove_redundancies, hv=-hv
+        )
         # Compute right._vertices as union of intersection vertices on the
         # hyperplane and original vertices on the right side.
         c_vertices = left.vertices[
-            np.where((left.vertices @ hyperplane.normal) == hyperplane.offset)
+            (left.vertices @ hyperplane.normal) == hyperplane.offset
         ]
-        r_vertices = self.vertices[
-            np.where((self.vertices @ hyperplane.normal) > hyperplane.offset)
-        ]
-        right._vertices = np.concatenate((c_vertices, r_vertices), axis=0)
-
+        r_vertices = self.vertices[hv > hyperplane.offset]
+        right.vertices = np.concatenate((c_vertices, r_vertices), axis=0)
         return left, right
 
     def contains(self, x: Iterable[NumberLike]) -> bool:
@@ -221,9 +277,9 @@ class Polytope:
         Returns:
             True if the point satisfies all inequalities, False otherwise.
         """
-        assert self.A.shape[1] == len(
-            x
-        ), "Point dimension does not match polytope dimension."
+        assert self.A.shape[1] == len(x), (
+            "Point dimension does not match polytope dimension."
+        )
         x = as_fraction_vector(x)
         vals = self.A @ x.reshape(-1, 1)
         return bool(np.all(vals.flatten() <= self.b.flatten()))

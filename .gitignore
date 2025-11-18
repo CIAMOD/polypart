@@ -1,3 +1,7 @@
+# profiling
+*.prof
+profiling/
+
 # Polypart building files
 dist/
 .venv/

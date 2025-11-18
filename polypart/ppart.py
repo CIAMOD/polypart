@@ -1,11 +1,14 @@
+"""Main algorithm and classes for polytope partitioning using decision trees."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
+
 import numpy as np
 
-from .geometry import Polytope, Hyperplane
-from .ftyping import as_fraction_vector, FractionVector, SplitStrategy
+from .ftyping import FractionVector, SplitStrategy, as_fraction_vector
+from .geometry import Hyperplane, Polytope
 
 
 @dataclass
@@ -23,7 +26,7 @@ class PartitionNode:
         depth: Depth of this node in the tree (0 for root).
         cut: Hyperplane used to split this node (None for leaf nodes).
         children: List of child nodes (empty for leaf nodes).
-        centroid_: Cached centroid of the polytope (computed lazily).
+        _centroid: Cached centroid of the polytope (computed lazily).
         _id: Unique identifier for leaf nodes.
     """
 
@@ -33,23 +36,59 @@ class PartitionNode:
     depth: int = 0
     cut: Optional[Hyperplane] = None
     children: List["PartitionNode"] = field(default_factory=list)
-    centroid_: Optional[FractionVector] = None
-    _id: Optional[int] = None
+
+    # Stored only for leaves, set by make_leaf()
+    _leaf_id: Optional[int] = field(default=None, init=False)
+    _centroid: Optional[FractionVector] = field(default=None, init=False, repr=False)
+
+    # Statistics
+    n_candidates: int = field(default=0, init=False)
+    n_inequalities: int = field(default=0, init=False)
+    n_vertices: int = field(default=0, init=False)
+
+    def __post_init__(self):
+        """Initialize statistics just after creation."""
+        if self.candidates is not None:
+            self.n_candidates = len(self.candidates)
+        if self.polytope is not None:
+            self.n_inequalities = self.polytope.A.shape[0]
+            if self.polytope.vertices is not None:
+                self.n_vertices = self.polytope.vertices.shape[0]
 
     @property
-    def centroid(self) -> FractionVector:
-        """Compute and cache the centroid of the polytope vertices.
+    def is_leaf(self) -> bool:
+        """True if this node is a leaf (final partition), False otherwise."""
+        if not self.children and self.centroid is None:
+            raise RuntimeError(
+                "Node is neither leaf nor internal (inconsistent state)."
+            )
+        return not self.children
 
-        Returns:
-            FractionVector: Mean of all polytope vertices.
+    @property
+    def region_id(self) -> Optional[int]:
+        """ID for leaf nodes, None otherwise."""
+        return self._leaf_id
 
-        Raises:
-            AssertionError: If polytope is not set.
+    @property
+    def centroid(self) -> np.ndarray:
         """
-        if self.centroid_ is None:
-            assert self.polytope is not None, "Polytope not set."
-            self.centroid_ = np.mean(self.polytope.vertices, axis=0)
-        return self.centroid_
+        Centroid of node's polytope (mean of vertices).
+        """
+        if self._leaf_id is None or self._centroid is None:
+            raise RuntimeError("Centroid is only available for final leaf nodes.")
+
+        return self._centroid
+
+    def make_leaf(self, leaf_id: int) -> None:
+        """
+        Mark this node as a leaf, assign its region id, and compute/store centroid.
+        """
+        if self.children:
+            raise RuntimeError("Cannot finalize a non-leaf node.")
+        if self.polytope is None:
+            raise RuntimeError("Polytope was discarded before finalization.")
+        self._leaf_id = leaf_id
+        self._centroid = np.mean(self.polytope.vertices, axis=0)
 
     def add_child(
         self, child_poly: Polytope, candidates: List[Hyperplane]
@@ -99,11 +138,9 @@ class PartitionTree:
 
     Attributes:
         root: Root PartitionNode of the tree.
-        n_regions: Number of leaf regions (partitions) in the tree.
     """
 
     root: PartitionNode
-    n_regions: int
 
     def classify(self, x: FractionVector) -> PartitionNode:
         """Classify a point into one of the leaf regions.
@@ -116,21 +153,53 @@ class PartitionTree:
         """
         return self.root.classify(x)
 
-    def stats(self) -> Tuple[int, int, float]:
+    def stats(self) -> dict[str, Any]:
         """Compute statistics of the partition tree.
 
         Returns:
-            Tuple[int, int, float]: (total number of nodes, maximum depth of the tree, average depth of leaf nodes)
+            dict: A dictionary with statistics including:
+                - total_nodes: Total number of nodes in the tree.
+                - max_depth: Maximum depth of the tree.
+                - avg_leaf_depth: Average depth of leaf nodes.
+                - avg_candidates: Average number of candidates per node.
+                - per_depth_nodes: Number of nodes at each depth.
+                - per_depth_avg_candidates: Average number of candidates per node at each depth.
+                - avg_inequalities_per_node: Average number of inequalities per node.
+                - per_depth_avg_inequalities: Average number of inequalities per node at each depth.
+                - avg_vertices_per_node: Average number of vertices per node.
+                - per_depth_avg_vertices: Average number of vertices per node at each depth.
         """
         total_nodes = 0
         max_depth = 0
         total_leaf_depth = 0
         leaf_count = 0
 
+        # Compute avg_candidates, avg_candidates per depth and number of nodes per depth
+        avg_candidates = 0
+        per_depth_counts = {}
+        per_depth_candidate_sums = {}
+        avg_inequalities = 0
+        per_depth_inequality_sums = {}
+        avg_vertices = 0
+        per_depth_vertex_sums = {}
+
         stack = [self.root]
         while stack:
             node = stack.pop()
             total_nodes += 1
+            avg_candidates += node.n_candidates
+            per_depth_counts[node.depth] = per_depth_counts.get(node.depth, 0) + 1
+            per_depth_candidate_sums[node.depth] = (
+                per_depth_candidate_sums.get(node.depth, 0) + node.n_candidates
+            )
+            avg_inequalities += node.n_inequalities
+            per_depth_inequality_sums[node.depth] = (
+                per_depth_inequality_sums.get(node.depth, 0) + node.n_inequalities
+            )
+            avg_vertices += node.n_vertices
+            per_depth_vertex_sums[node.depth] = (
+                per_depth_vertex_sums.get(node.depth, 0) + node.n_vertices
+            )
             if node.depth > max_depth:
                 max_depth = node.depth
             if not node.children:  # Leaf node
@@ -140,13 +209,37 @@ class PartitionTree:
                 stack.extend(node.children)
 
         avg_leaf_depth = total_leaf_depth / leaf_count if leaf_count > 0 else 0
-        return total_nodes, max_depth, avg_leaf_depth
+        avg_candidates /= total_nodes
+        avg_inequalities /= total_nodes
+        avg_vertices /= total_nodes
+        return {
+            "total_nodes": total_nodes,
+            "max_depth": max_depth,
+            "avg_leaf_depth": avg_leaf_depth,
+            "per_depth_nodes": per_depth_counts,
+            "avg_candidates": avg_candidates,
+            "per_depth_avg_candidates": {
+                depth: per_depth_candidate_sums[depth] / count
+                for depth, count in per_depth_counts.items()
+            },
+            "avg_inequalities_per_node": avg_inequalities,
+            "per_depth_avg_inequalities": {
+                depth: per_depth_inequality_sums[depth] / count
+                for depth, count in per_depth_counts.items()
+            },
+            "avg_vertices_per_node": avg_vertices,
+            "per_depth_avg_vertices": {
+                depth: per_depth_vertex_sums[depth] / count
+                for depth, count in per_depth_counts.items()
+            },
+        }
 
 
 def choose_best_split(
     polytope: Polytope,
     candidates: Sequence[Hyperplane],
     strategy: SplitStrategy = "v-entropy",
+    remove_redundancies: bool = False,
 ) -> Tuple[
     Optional[Hyperplane],
     Optional[Tuple[Polytope, Polytope]],
@@ -199,8 +292,8 @@ def choose_best_split(
 
         # Compute Shannon entropy: H = -p_left * log2(p_left) - p_right * log2(p_right)
         # Use np.nan_to_num to handle log(0) cases (when all vertices on one side)
-        entropies = -(p_less * np.log2(p_less, where=(p_less > 0))) - (
-            p_greater * np.log2(p_greater, where=(p_greater > 0))
+        entropies = -(p_less * np.log2(p_less, where=p_less > 0)) - (
+            p_greater * np.log2(p_greater, where=p_greater > 0)
         )
         entropies = np.nan_to_num(entropies, nan=0.0)
 
@@ -213,7 +306,7 @@ def choose_best_split(
 
     # Get the selected hyperplane and split the polytope
     b_hyp = candidates[b_i]
-    children = polytope.split_by_hyperplane(b_hyp)
+    children = polytope.split_by_hyperplane(b_hyp, remove_redundancies)
 
     # Remove the used hyperplane from candidates
     remaining = [candidates[i] for i in idxs if i != b_i]
@@ -225,6 +318,7 @@ def build_partition_tree(
     polytope: Polytope,
     hyperplanes: Sequence[Hyperplane],
     strategy: SplitStrategy = "v-entropy",
+    remove_redundancies: bool = False,
 ) -> Tuple[PartitionTree, int]:
     """Build a partition tree by recursively splitting a polytope with hyperplanes.
 
@@ -265,13 +359,15 @@ def build_partition_tree(
 
         # Attempt to split the current node
         b_hyp, children, remaining_candidates = choose_best_split(
-            node.polytope, node.candidates, strategy=strategy
+            node.polytope,
+            node.candidates,
+            strategy=strategy,
+            remove_redundancies=remove_redundancies,
         )
 
         if b_hyp is None:
             # No valid split found - this becomes a leaf node
-            node.centroid  # Force computation of centroid for leaf nodes
-            node._id = n_partitions
+            node.make_leaf(n_partitions)  # computes centroid + sets id
             n_partitions += 1
 
             # Progress reporting for large partitions
@@ -296,5 +392,5 @@ def build_partition_tree(
         node.polytope = None
         node.candidates = None
 
-    tree = PartitionTree(root, n_partitions)
+    tree = PartitionTree(root)
     return tree, n_partitions
