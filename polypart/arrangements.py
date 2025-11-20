@@ -2,56 +2,28 @@
 Functions to generate predifined arrangements of hyperplanes.
 """
 
-from math import gcd
 from functools import reduce
+from math import gcd
 
 import numpy as np
 
-from .geometry import Polytope, Hyperplane
+from .geometry import Hyperplane, Polytope
 from .moduli import get_planes
-from .utils import sample_point_in_polytope, compute_hyperplane_from_points
+from .utils import sample_intersecting_hyperplanes
 
 
-def get_random_arrangement(
-    polytope: Polytope, m: int, decimals: int = None
+def get_moduli_arrangement(
+    n: int, r: int, d: int, use_epsilons: bool = True
 ) -> list[Hyperplane]:
-    """Get m random hyperplanes intersecting the polytope.
-    If decimals is set, round coefficients to that many decimals so
-    that hyperplanes have nicer coefficients and reduce coefficients
-    fractions as much as possible.
-    (for small polytopes it will take longer and could get stuck).
+    """Get arrangement of hyperplanes from moduli space construction.
+    Dimension is n·(r-1) if use_epsilons is True, else n·r
+    Args:
+        n: number of parabolic points
+        r: rank of vector bundles
+        d: degree of vector bundles
+        use_epsilons: whether to reduce dimensionality
     """
-    hyperplanes = []
-    dim = polytope.A.shape[1]
-    while len(hyperplanes) < m:
-        points = np.array([sample_point_in_polytope(polytope) for _ in range(dim)])
-        result = compute_hyperplane_from_points(points, decimals=decimals)
-        if result is None:
-            print("Degenerate points, resampling...")
-            continue  # Degenerate points, resample
-
-        hyperplane = Hyperplane.from_coefficients([*result[0], result[1]])
-
-        if not polytope.intersecting_hyperplanes([hyperplane])[0]:
-            continue  # Does not intersect, resample
-
-        hyperplanes.append(hyperplane)
-
-    if decimals is not None:
-        # Find gcd of all denominators and multiply all coefficients by it
-        for i, h in enumerate(hyperplanes):
-            coeffs = np.append(h.normal, h.offset)
-            denominators = [frac.denominator for frac in coeffs if frac != 0]
-            common_denom = reduce(gcd, denominators)
-            new_coeffs = coeffs * common_denom
-            hyperplanes[i] = Hyperplane.from_coefficients(new_coeffs)
-
-    return hyperplanes
-
-
-def get_moduli_arrangement(n: int, r: int, d: int) -> list[Hyperplane]:
-    """Get arrangement of hyperplanes from moduli space construction."""
-    planes = get_planes(n, r, d, use_epsilons=True)
+    planes = get_planes(n, r, d, use_epsilons=use_epsilons)
     hyperplanes = []
     for v, ks in planes:
         for k in ks:
@@ -89,3 +61,12 @@ def get_braid_arrangement(d: int) -> list[Hyperplane]:
             coeffs[j] = -1
             hyperplanes.append(Hyperplane.from_coefficients(np.append(coeffs, 0)))
     return hyperplanes
+
+
+def get_random_arrangement(
+    polytope: Polytope, m: int, decimals: int = None
+) -> list[Hyperplane]:
+    """Sample m hyperplanes intersecting the polytope.
+    If decimals is set, limit denominators of normal coefficients to 10**decimals.
+    """
+    return sample_intersecting_hyperplanes(polytope, m, decimals=decimals)

@@ -1,54 +1,71 @@
-"""
-Utility functions for polytopes and hyperplanes.
-"""
+import sys
+from functools import reduce
+from math import gcd
+from pathlib import Path
 
 import numpy as np
 
-from .geometry import Polytope
+from .ftyping import FractionVector, as_fraction_vector
+from .geometry import Hyperplane, Polytope
 
 
-def sample_point_in_polytope(polytope: Polytope) -> np.ndarray:
+def sample_point_in_polytope(
+    polytope: Polytope, decimals: int = None
+) -> FractionVector:
     """Sample a point uniformly at random from the polytope using rejection sampling."""
-    mins = np.min(polytope.vertices, axis=0).astype(float)
-    maxs = np.max(polytope.vertices, axis=0).astype(float)
+    # Lower bound on decimals based on diameter of the polytope
+    if decimals is not None:
+        assert decimals >= 0, "decimals must be non-negative"
+        assert int(-np.log10(float(polytope.diameter))) + 1 <= decimals, (
+            f"decimals = {decimals} is too small for the polytope's diameter = {polytope.diameter}"
+        )
 
-    assert np.all(maxs > mins), "Polytope has no volume."
+    # Get bounding box of the polytope
+    mins = np.min(polytope.vertices, axis=0).astype(float)  # shape (dim,)
+    maxs = np.max(polytope.vertices, axis=0).astype(float)  # shape (dim,)
 
     while True:
-        point = np.random.uniform(mins, maxs)
+        # Sample a random point in the bounding box
+        point = as_fraction_vector(np.random.uniform(mins, maxs))
+        # Limit denominator of mpq fractions to avoid very large numbers
+        if decimals is not None:
+            point = as_fraction_vector(
+                [frac.limit_denominator(10**decimals) for frac in point]
+            )
+        # Check if the point is in the polytope
         if polytope.contains(point):
             return point
 
 
-def compute_hyperplane_from_points(
-    points: np.ndarray, decimals: int = None
-) -> tuple[np.ndarray, float] | None:
-    """
-    Compute hyperplane from d points in d-dimensional space.
-    Returns (normal, offset) or None if degenerate.
-    """
-    P = np.asarray(points, dtype=float)
+def _simplify_coefficients(coeffs: FractionVector) -> FractionVector:
+    """Simplify the coefficients by dividing by their GCD of denominators."""
+    denominators = [frac.denominator for frac in coeffs if frac != 0]
+    if not denominators:
+        return coeffs
+    common_denom = reduce(gcd, denominators)
+    new_coeffs = coeffs * common_denom
+    return new_coeffs
 
-    if P.ndim != 2 or P.shape[0] != P.shape[1]:
-        raise ValueError("points must be a (d, d) array: d points in d-D space")
 
-    p0 = P[0]
-    V = P[1:] - p0  # (d-1, d); rows span the hyperplane
-    if np.linalg.matrix_rank(V) < P.shape[1] - 1:
-        return None
+def sample_intersecting_hyperplanes(
+    polytope: Polytope, m: int, decimals: int = None
+) -> list[Hyperplane]:
+    hyperplanes = []
+    dim = polytope.A.shape[1]
 
-    _, _, vh = np.linalg.svd(V)
-    normal = vh[-1]
-    norm = np.linalg.norm(normal)
-    if norm == 0:
-        return None
+    while len(hyperplanes) < m:
+        point = sample_point_in_polytope(polytope, decimals=4)
+        normal = np.random.normal(size=dim)
+        normal = normal / np.linalg.norm(normal)  # Normalize to unit length
+        normal = as_fraction_vector(normal)
+        # limit denominator of mpq fractions to avoid very large numbers
+        if decimals is not None:
+            normal = as_fraction_vector(
+                [frac.limit_denominator(10**decimals) for frac in normal]
+            )
+        offset = np.dot(normal, point)
+        coefficients = np.append(normal, offset)
+        coefficients = _simplify_coefficients(coefficients)
+        hyperplanes.append(Hyperplane.from_coefficients(coefficients))
 
-    normal /= norm
-    offset = float(normal @ p0)
-
-    # Round normal and offset to get prettier numbers
-    if decimals is not None:
-        normal = np.round(normal, decimals=decimals)
-        offset = np.round(offset, decimals=decimals)
-
-    return normal, offset
+    return hyperplanes

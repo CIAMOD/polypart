@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Sequence, Tuple
 
@@ -128,7 +129,6 @@ class PartitionNode:
             return self.children[1].classify(x)
 
 
-@dataclass
 class PartitionTree:
     """Binary tree representing a recursive partition of a polytope.
 
@@ -140,7 +140,15 @@ class PartitionTree:
         root: Root PartitionNode of the tree.
     """
 
-    root: PartitionNode
+    def __init__(self, root: PartitionNode):
+        """Initialize the partition tree with the given root node.
+
+        Args:
+            root: The root PartitionNode of the tree.
+        """
+        self.root = root
+
+        self._stat_dict: Optional[dict[str, Any]] = None
 
     def classify(self, x: FractionVector) -> PartitionNode:
         """Classify a point into one of the leaf regions.
@@ -160,7 +168,7 @@ class PartitionTree:
             dict: A dictionary with statistics including:
                 - total_nodes: Total number of nodes in the tree.
                 - max_depth: Maximum depth of the tree.
-                - avg_leaf_depth: Average depth of leaf nodes.
+                - avg_depth: Average depth of leaf nodes.
                 - avg_candidates: Average number of candidates per node.
                 - per_depth_nodes: Number of nodes at each depth.
                 - per_depth_avg_candidates: Average number of candidates per node at each depth.
@@ -171,7 +179,7 @@ class PartitionTree:
         """
         total_nodes = 0
         max_depth = 0
-        total_leaf_depth = 0
+        cum_depth = 0
         leaf_count = 0
 
         # Compute avg_candidates, avg_candidates per depth and number of nodes per depth
@@ -203,19 +211,19 @@ class PartitionTree:
             if node.depth > max_depth:
                 max_depth = node.depth
             if not node.children:  # Leaf node
-                total_leaf_depth += node.depth
+                cum_depth += node.depth
                 leaf_count += 1
             else:
                 stack.extend(node.children)
 
-        avg_leaf_depth = total_leaf_depth / leaf_count if leaf_count > 0 else 0
+        avg_depth = cum_depth / leaf_count if leaf_count > 0 else 0
         avg_candidates /= total_nodes
         avg_inequalities /= total_nodes
         avg_vertices /= total_nodes
-        return {
+        self._stat_dict = {
             "total_nodes": total_nodes,
             "max_depth": max_depth,
-            "avg_leaf_depth": avg_leaf_depth,
+            "avg_depth": avg_depth,
             "per_depth_nodes": per_depth_counts,
             "avg_candidates": avg_candidates,
             "per_depth_avg_candidates": {
@@ -233,6 +241,21 @@ class PartitionTree:
                 for depth, count in per_depth_counts.items()
             },
         }
+        return self._stat_dict
+
+    def print_stats(self, include_per_depth_stats: bool = False) -> None:
+        """Print the statistics of the partition tree in a readable format."""
+        if self._stat_dict is None:
+            self.stats()
+        if not include_per_depth_stats:
+            stat_copy = self._stat_dict.copy()
+            # Iterate over keys to remove "*per_depth*" stats
+            for key in list(stat_copy.keys()):
+                if "per_depth" in key:
+                    del stat_copy[key]
+            print(json.dumps(stat_copy, indent=4))
+        else:
+            print(json.dumps(self._stat_dict, indent=4))
 
 
 def choose_best_split(

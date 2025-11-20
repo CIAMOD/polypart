@@ -4,6 +4,7 @@ Functions to generate predifined polytopes.
 
 import numpy as np
 
+from .ftyping import Fraction, NumberLike, as_fraction_vector
 from .geometry import Polytope
 from .moduli import get_simplex_inequalities
 
@@ -41,7 +42,7 @@ def get_product_of_simplices(n: int, d: int) -> Polytope:
 
 
 def get_random_polytope(
-    d: int, m: int, radius: float = 1.0, seed: int = None
+    d: int, m: int, radius: NumberLike = 1.0, seed: int = None
 ) -> Polytope:
     """
     Generate a random circumscribed polytope in R^d using the boundary model on
@@ -53,6 +54,7 @@ def get_random_polytope(
     if m < d + 1:
         raise ValueError(f"Need at least d+1={d + 1} halfspaces, got m={m}.")
 
+    radius = Fraction(radius)
     rng = np.random.default_rng(seed)
 
     while True:
@@ -60,8 +62,7 @@ def get_random_polytope(
         normals /= np.linalg.norm(normals, axis=1, keepdims=True)
 
         A = normals
-        b = radius * np.ones(m)
-
+        b = radius * as_fraction_vector(np.ones(m))
         P = Polytope(A, b)
         try:
             P.extreme()  # raises if infeasible or unbounded

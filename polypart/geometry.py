@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple
 
 import cdd.gmp
@@ -18,6 +17,7 @@ from .ftyping import (
     as_fraction_vector,
     to_fraction,
 )
+from .volume import volume_nmz
 
 
 class Hyperplane:
@@ -57,6 +57,10 @@ class Hyperplane:
         hyperplane.offset = -self.offset
         return hyperplane
 
+    def __neg__(self) -> """Hyperplane""":
+        """Return a new Hyperplane with normal and offset negated."""
+        return self.flip()
+
     def __repr__(self) -> str:
         return f"Hyperplane(normal=[{' '.join(str(a) for a in self.normal)}], offset={self.offset})"
 
@@ -82,10 +86,27 @@ class Polytope:
             raise ValueError(
                 "A and b incompatible: got A.shape=%s, b.shape=%s" % (A.shape, b.shape)
             )
-        self.A: FractionMatrix = A
-        self.b: FractionVector = b
+        self._A = A
+        self._b = b
         self._vertices: Optional[FractionMatrix] = None
+        self._volume: Optional[Fraction] = None
+        self._diameter: Optional[Fraction] = None
         self._dim: int = A.shape[1]
+
+    @property
+    def A(self) -> FractionMatrix:
+        """Inequality matrix A in H-representation A x ≤ b."""
+        return self._A
+
+    @property
+    def b(self) -> FractionVector:
+        """Inequality vector b in H-representation A x ≤ b."""
+        return self._b.flatten()
+
+    @property
+    def inequalities(self) -> Tuple[FractionMatrix, FractionVector]:
+        """Return the inequalities (A, b) in H-representation A x ≤ b."""
+        return self._A, self.b
 
     # ---------- Constructors ----------
     @classmethod
@@ -115,9 +136,10 @@ class Polytope:
 
         # Allocate instance without calling __init__
         self = cls.__new__(cls)
-        self.A = A
-        self.b = b
+        self._A = A
+        self._b = b
         self._vertices = None
+        self._volume = None
         self._dim = A.shape[1]
         return self
 
@@ -163,6 +185,41 @@ class Polytope:
             )
         self._vertices = V
 
+    @property
+    def volume(self) -> Fraction:
+        """Euclidean volume of the polytope, computed on demand and cached.
+
+        Returns:
+            Exact volume as a :class:`Fraction`.
+        """
+        if self._volume is None:
+            # volume_nmz expects FractionMatrix/Vector (object dtype)
+            self._volume = volume_nmz(self._A, self.b)
+        return self._volume
+
+    @property
+    def diameter(self) -> Fraction:
+        """Diameter of the polytope, computed on demand and cached.
+
+        Returns:
+            Exact diameter as a :class:`Fraction`.
+        """
+        if self._diameter is None:
+            if self._vertices is None:
+                raise ValueError("Vertices not computed yet. Call .extreme() first.")
+            max_dist = Fraction(0)
+            for i in range(self._vertices.shape[0]):
+                for j in range(i + 1, self._vertices.shape[0]):
+                    dist = sum(
+                        (self._vertices[i, k] - self._vertices[j, k]) ** 2
+                        for k in range(self._dim)
+                    )
+                    dist = Fraction(float(dist) ** 0.5)
+                    if dist > max_dist:
+                        max_dist = dist
+            self._diameter = max_dist
+        return self._diameter
+
     # ---------- Operations ----------
     def extreme(self) -> None:
         """Compute exact vertices with cdd and cache the V-representation.
@@ -170,14 +227,14 @@ class Polytope:
         Raises:
             ValueError: if H-rep is infeasible or unbounded.
         """
-        mat = cdd.gmp.matrix_from_array(np.hstack([self.b, -self.A]))
+        mat = cdd.gmp.matrix_from_array(np.hstack([self._b, -self._A]))
         mat.rep_type = cdd.gmp.RepType.INEQUALITY
         polyhedron = cdd.gmp.polyhedron_from_matrix(mat)
         # Convert to .ftyping.FractionMatrix
         V = as_fraction_matrix(cdd.gmp.copy_generators(polyhedron).array)
         if V.size == 0:
             raise ValueError("Empty vertex set. The H-rep might be infeasible.")
-        if not np.all([v == Fraction(1) for v in V[:, 0]]):
+        if not np.all([v == 1 for v in V[:, 0]]):
             raise ValueError("Inequalities do not represent a bounded polytope.")
         self._vertices = V[:, 1:]
 
@@ -200,7 +257,7 @@ class Polytope:
         if remove_redundancies:
             A_keep, b_keep = self.filter_inequalities(halfspace, hv=hv)
         else:
-            A_keep, b_keep = self.A, self.b
+            A_keep, b_keep = self._A, self._b
         A = np.concatenate((A_keep, halfspace.normal[None, :]), axis=0)
         b = np.concatenate(
             (b_keep, np.array([[halfspace.offset]], dtype=object)), axis=0
@@ -209,11 +266,11 @@ class Polytope:
 
     def remove_redundancies(self) -> """Polytope""":
         """Remove redundant inequalities from H-representation using cdd."""
-        mat = cdd.gmp.matrix_from_array(np.hstack([self.b.reshape(-1, 1), -self.A]))
+        mat = cdd.gmp.matrix_from_array(np.hstack([self._b.reshape(-1, 1), -self._A]))
         redundant_rows = list(cdd.gmp.redundant_rows(mat))
         if redundant_rows:
-            self.A = np.delete(self.A, redundant_rows, axis=0)
-            self.b = np.delete(self.b, redundant_rows, axis=0)
+            self._A = np.delete(self._A, redundant_rows, axis=0)
+            self._b = np.delete(self._b, redundant_rows, axis=0)
         return self
 
     def filter_inequalities(
@@ -227,14 +284,16 @@ class Polytope:
         """
         if self._vertices is None:
             raise ValueError("Vertices not computed yet. Call .extreme() first.")
+        if hv is None:
+            hv = self._vertices @ cut_hyperplane.normal
         lvertices = self._vertices[hv < cut_hyperplane.offset]
-        values = lvertices @ self.A.T  # Shape: (n_lvertices, n_inequalities)
+        values = lvertices @ self._A.T  # Shape: (n_lvertices, n_inequalities)
         to_keep = []
-        for i in range(self.A.shape[0]):
+        for i in range(self._A.shape[0]):
             # If any vertex satisfies the inequality at equality, it's not redundant
-            if np.any(values[:, i] == self.b[i, 0]):
+            if np.any(values[:, i] == self._b[i, 0]):
                 to_keep.append(i)
-        return self.A[to_keep, :], self.b[to_keep, :]
+        return self._A[to_keep, :], self._b[to_keep, :]
 
     def split_by_hyperplane(
         self, hyperplane: Hyperplane, remove_redundancies: bool = False
@@ -268,21 +327,25 @@ class Polytope:
         right.vertices = np.concatenate((c_vertices, r_vertices), axis=0)
         return left, right
 
-    def contains(self, x: Iterable[NumberLike]) -> bool:
+    def contains(self, x: Iterable[NumberLike], strict: bool = True) -> bool:
         """Check whether a point lies inside the polytope (A x ≤ b).
 
         Args:
             x: point (length d) as an iterable of number-like values.
+            strict: if True, use strict inequalities (A x < b).
 
         Returns:
             True if the point satisfies all inequalities, False otherwise.
         """
-        assert self.A.shape[1] == len(x), (
+        assert self._A.shape[1] == len(x), (
             "Point dimension does not match polytope dimension."
         )
         x = as_fraction_vector(x)
-        vals = self.A @ x.reshape(-1, 1)
-        return bool(np.all(vals.flatten() <= self.b.flatten()))
+        vals = self._A @ x.reshape(-1, 1)
+        if strict:
+            return bool(np.all(vals.flatten() < self._b.flatten()))
+        else:
+            return bool(np.all(vals.flatten() <= self._b.flatten()))
 
     def intersecting_hyperplanes(
         self,
@@ -347,6 +410,6 @@ class Polytope:
         else:
             n_vertices = self._vertices.shape[0]
         return (
-            f"Polytope(dim={self.dim}, n_ineq={self.A.shape[0]}, "
+            f"Polytope(dim={self.dim}, n_ineq={self._A.shape[0]}, "
             f"n_vertices={n_vertices})"
         )
