@@ -1,9 +1,8 @@
+from .ftyping import as_fraction_matrix, as_fraction_vector
 from .geometry import Hyperplane, Polytope
-from .ppart import build_partition_tree, PartitionTree
-from .ftyping import as_fraction_vector, as_fraction_matrix
-from .io import save_tree, load_tree
+from .io import load_tree, save_tree
+from .ppart import PartitionTree, build_partition_tree
 
-__version__ = "0.1.1"
 __all__ = [
     "Hyperplane",
     "Polytope",
@@ -13,5 +12,4 @@ __all__ = [
     "as_fraction_matrix",
     "save_tree",
     "load_tree",
-    "__version__",
 ]

@@ -1,32 +1,37 @@
+"""
+Tests for saving and loading partition trees.
+"""
+
 import os
 import tempfile
+
 import numpy as np
-from fractions import Fraction
 
-from polypart.ppart import PartitionNode, PartitionTree
-from polypart.geometry import Hyperplane
+from polypart.ppart import PartitionTree
+from polypart.geometry import Hyperplane, Polytope
 from polypart.io import save_tree, load_tree
+from polypart.ppart import build_partition_tree
 
 
-def make_simple_tree():
-    # create a root node with two children (one leaf, one internal)
-    v1 = np.array([Fraction(1, 2), Fraction(1, 3)], dtype=object)
-    v2 = np.array([Fraction(2, 3), Fraction(1, 4)], dtype=object)
-    h = Hyperplane(np.array([Fraction(1), Fraction(-1)], dtype=object), Fraction(0))
+def make_simple_tree() -> PartitionTree:
+    """Create a simple partition tree for testing."""
+    # unit square in 2D: inequalities x>=0, x<=1, y>=0, y<=1 -> expressed as A x <= b
+    A = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    b = [0, 1, 0, 1]
+    square = Polytope(A, b)
+    square.extreme()
 
-    root = PartitionNode(polytope=None, candidates=None, parent=None, depth=0)
-    root.centroid_ = v1
-    root.cut = h
+    # two axis-aligned hyperplanes: x = 0.2 and y = 0.2
+    h1 = Hyperplane.from_coefficients([1, 0, 0.2])
+    h2 = Hyperplane.from_coefficients([0, 1, 0.2])
 
-    c1 = PartitionNode(polytope=None, candidates=None, parent=root, depth=1)
-    c1.centroid_ = v2
-    c2 = PartitionNode(polytope=None, candidates=None, parent=root, depth=1)
+    tree, _ = build_partition_tree(square, [h1, h2])
 
-    root.children = [c1, c2]
-    return PartitionTree(root, n_regions=2)
+    return tree
 
 
 def test_save_load_roundtrip():
+    """Test saving and loading a simple partition tree."""
     tree = make_simple_tree()
     tmpdir = tempfile.mkdtemp()
     path = os.path.join(tmpdir, "tree.json")
@@ -34,16 +39,17 @@ def test_save_load_roundtrip():
     save_tree(tree, path)
     loaded = load_tree(path)
 
-    # Check top-level counts
-    assert loaded.n_regions == tree.n_regions
-    assert loaded.root.depth == tree.root.depth
-
-    # Check centroid round-trip for root
-    orig_cent = tree.root.centroid_
-    loaded_cent = loaded.root.centroid_
-    assert np.array_equal(orig_cent, loaded_cent)
-
-    # Check cut hyperplane round-trip
-    assert loaded.root.cut is not None
-    assert np.array_equal(loaded.root.cut.normal, tree.root.cut.normal)
-    assert loaded.root.cut.offset == tree.root.cut.offset
+    # Compare structures iterating the trees in parallel,
+    # checking if they have the same cut_hyperplane and children
+    nodes1 = [tree.root]
+    nodes2 = [loaded.root]
+    while nodes1 and nodes2:
+        n1 = nodes1.pop()
+        n2 = nodes2.pop()
+        assert (n1.cut is None) == (n2.cut is None)
+        if n1.cut is not None and n2.cut is not None:
+            assert np.array_equal(n1.cut.normal, n2.cut.normal)
+            assert n1.cut.offset == n2.cut.offset
+        assert len(n1.children) == len(n2.children)
+        nodes1.extend(n1.children)
+        nodes2.extend(n2.children)

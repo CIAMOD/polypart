@@ -22,6 +22,7 @@ All computations use exact rational arithmetic, which ensures robustness and eli
 - Python >= 3.10.6
 - numpy >= 1.24.4
 - pycddlib >= 3.0.2
+- gmpy2 >= 2.1.5
 
 ### Installation
 
@@ -32,6 +33,7 @@ pip install polypart
 ```
 
 2. Import the package in your Python code
+
 ```python
 import polypart
 ```
@@ -39,7 +41,7 @@ import polypart
 ### Basic Usage
 
 ```python
-from fractions import Fraction
+from polypart.ftyping import Fraction
 from polypart.geometry import Polytope, Hyperplane
 from polypart.ppart import build_partition_tree
 from polypart.io import save_tree
@@ -66,12 +68,15 @@ print("Number of regions:", n_parts)
 Complete Jupyter notebooks providing guided, reproducible demonstrations of how to use PolyPart are available in the [examples folder](https://github.com/ciamod/polypart/examples):
 
 - [**Partitioning_Unit_Square.ipynb**](https://github.com/CIAMOD/polypart/tree/master/examples/Partitioning_Unit_Square.ipynb)
- 
+
   Demonstrates the algorithm on a simple, visual case: partitioning the unit square with three hyperplanes. Includes a plot of the resulting regions and new random points classified into their respective regions using the partition tree.
 
 - [**Moduli_Stability_Chambers.ipynb**](https://github.com/CIAMOD/polypart/tree/master/examples/Moduli_Stability_Chambers.ipynb)
   A higher-dimensional research application on moduli spaces of parabolic vector bundles.
 
+## Experiments
+
+Extensive computational experiments have been conducted to evaluate the performance and scalability of the PolyPart package. The experiment configurations, execution scripts, and results analysis notebooks are available in the [experiments folder](experiments/).
 
 ## 📜 License
 
@@ -79,10 +84,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Authors
 
-- ***Sergio Herreros Pérez***, Institute for Research in Technology, ICAI, Comillas Pontifical University
-- ***José Portela González***, Department of Quantitative Methods, ICADE, Comillas Pontifical University and Institute for Research in Technology, IIT, Comillas Pontifical University
-- ***David Alfaya Sánchez***, Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
-- ***Jaime Pizarroso Gonzalo***, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University, and Santalucía Chair of Analytics for Education.
+- **_Sergio Herreros Pérez_**, Institute for Research in Technology, ICAI, Comillas Pontifical University
+- **_José Portela González_**, Department of Quantitative Methods, ICADE, Comillas Pontifical University and Institute for Research in Technology, IIT, Comillas Pontifical University
+- **_David Alfaya Sánchez_**, Department of Applied Mathematics and Institute for Research in Technology, ICAI, Comillas Pontifical University
+- **_Jaime Pizarroso Gonzalo_**, Department of Telematics and Computing and Institute for Research in Technology, ICAI, Comillas Pontifical University, and Santalucía Chair of Analytics for Education.
 
 ## 🙌 Acknowledgments
 
@@ -105,5 +110,5 @@ Special thanks to everyone who contributed to the project:
 
 ## 📚 References
 
-- *David Alfaya, Sergio Herreros, Jaime Pizarroso, José Portela, and Javier Rodrigo*, **"A Computational Analysis of Ismorphism Classes of Moduli Spaces of Parabolic Vector Bundles"**, *in preparation*, 2025.
-- *David Alfaya, Sergio Herreros, Jaime Pizarroso and José Portela*, **"PolyPart: Exact Partitioning of Convex Polytopes uisng Decision Trees"**, *in preparation*, 2025.
+- _David Alfaya, Sergio Herreros, Jaime Pizarroso, José Portela, and Javier Rodrigo_, **"A Computational Analysis of Ismorphism Classes of Moduli Spaces of Parabolic Vector Bundles"**, _in preparation_, 2025.
+- _David Alfaya, Sergio Herreros, Jaime Pizarroso and José Portela_, **"PolyPart: Exact Partitioning of Convex Polytopes uisng Decision Trees"**, _in preparation_, 2025.

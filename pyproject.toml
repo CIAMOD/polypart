@@ -1,6 +1,6 @@
 [project]
 name = "polypart"
-version = "0.1.1"
+version = "0.2.0"
 description = "Robust polytope partitioning and efficient point classification in Python"
 keywords = ["polytope", "partition", "hyperplane arrangement", "point location", "decision tree"]
 readme = "README.md"
@@ -11,10 +11,17 @@ authors = [
     { name = "Jaime Pizarroso Gonzalo", email = "jpizarroso@comillas.edu"} 
 ]
 dependencies = [
+    "gmpy2==2.2.2a1",
+    "ipykernel>=7.1.0",
+    "matplotlib>=3.10.7",
     "numpy>=1.24.4",
+    "psutil>=7.1.3",
     "pycddlib>=3.0.2",
+    "resource>=0.2.1",
+    "tqdm>=4.67.1",
 ]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -43,7 +50,6 @@ explicit = true
 max-line-length = 88
 extend-ignore = ["E203", "W503"]
 
-# pyproject.toml
 [tool.setuptools.packages.find]
 include = ["polypart*"]
 exclude = ["tests*", "examples*", "data*", "images*"]
