@@ -1,6 +1,13 @@
+# data files
+data/
+
 # profiling
 *.prof
 profiling/
+
+# pruebas or fixes
+fix*.py
+prueba*.py
 
 # Polypart building files
 dist/

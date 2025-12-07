@@ -22,7 +22,7 @@ All computations use exact rational arithmetic, which ensures robustness and eli
 - Python >= 3.10.6
 - numpy >= 1.24.4
 - pycddlib >= 3.0.2
-- quicktions==1.22
+- gmpy2 >= 2.1.5
 
 ### Installation
 
@@ -73,6 +73,10 @@ Complete Jupyter notebooks providing guided, reproducible demonstrations of how 
 
 - [**Moduli_Stability_Chambers.ipynb**](https://github.com/CIAMOD/polypart/tree/master/examples/Moduli_Stability_Chambers.ipynb)
   A higher-dimensional research application on moduli spaces of parabolic vector bundles.
+
+## Experiments
+
+Extensive computational experiments have been conducted to evaluate the performance and scalability of the PolyPart package. The experiment configurations, execution scripts, and results analysis notebooks are available in the [experiments folder](experiments/).
 
 ## 📜 License
 

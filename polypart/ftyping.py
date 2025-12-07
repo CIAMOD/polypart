@@ -9,15 +9,12 @@ from typing import Iterable, Literal, TypeAlias, Union
 
 import numpy as np
 from gmpy2 import mpq
-from quicktions import Fraction as QFraction
 
 Fraction: TypeAlias = mpq
 """Rational number type using gmpy2.mpq for better performance."""
 
 # Include numpy scalar numeric types so they are accepted as "number-like"
-NumberLike = Union[
-    int, float, SlowFraction, QFraction, Fraction, np.integer, np.floating
-]
+NumberLike = Union[int, float, SlowFraction, Fraction, np.integer, np.floating]
 
 # Strategy type for hyperplane selection
 SplitStrategy: TypeAlias = Literal["random", "v-entropy"]
@@ -77,11 +74,14 @@ def as_fraction_matrix(rows: Iterable[Iterable[NumberLike]]) -> FractionMatrix:
     return frac_arr
 
 
-def as_fraction_vector(vals: Iterable[NumberLike]) -> FractionVector:
+def as_fraction_vector(
+    vals: Iterable[NumberLike], decimals: int = None
+) -> FractionVector:
     """Create a 1-D object-dtype numpy array of Fractions.
 
     Args:
         vals: iterable of number-like values.
+        decimals: if set, limit denominators to 10**decimals.
 
     Returns:
         1-D numpy array (dtype=object) of Fraction objects.
@@ -95,4 +95,8 @@ def as_fraction_vector(vals: Iterable[NumberLike]) -> FractionVector:
     to_frac_ufunc = np.frompyfunc(to_fraction, 1, 1)
     frac_arr = to_frac_ufunc(arr)
     # frompyfunc already yields dtype=object
+    if decimals is not None:
+        limit = 10**decimals
+        for i in range(frac_arr.shape[0]):
+            frac_arr[i] = frac_arr[i].limit_denominator(limit)
     return frac_arr

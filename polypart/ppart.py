@@ -31,12 +31,18 @@ class PartitionNode:
         _id: Unique identifier for leaf nodes.
     """
 
+    # Volatile data, discarded after processing
     polytope: Optional[Polytope]
     candidates: Optional[List[Hyperplane]]
+
+    # Additional attributes
     parent: Optional["PartitionNode"] = None
     depth: int = 0
-    cut: Optional[Hyperplane] = None
+
     children: List["PartitionNode"] = field(default_factory=list)
+
+    # Stored only for internal nodes
+    cut: Optional[Hyperplane] = field(default=None)
 
     # Stored only for leaves, set by make_leaf()
     _leaf_id: Optional[int] = field(default=None, init=False)
@@ -51,10 +57,16 @@ class PartitionNode:
         """Initialize statistics just after creation."""
         if self.candidates is not None:
             self.n_candidates = len(self.candidates)
+        else:
+            raise RuntimeError("Candidates list is None at node initialization.")
         if self.polytope is not None:
             self.n_inequalities = self.polytope.A.shape[0]
             if self.polytope.vertices is not None:
                 self.n_vertices = self.polytope.vertices.shape[0]
+            else:
+                raise RuntimeError("Polytope vertices are None at node initialization.")
+        else:
+            raise RuntimeError("Polytope is None at node initialization.")
 
     @property
     def is_leaf(self) -> bool:
@@ -161,21 +173,31 @@ class PartitionTree:
         """
         return self.root.classify(x)
 
-    def stats(self) -> dict[str, Any]:
+    def stats(
+        self,
+        alphas: list[int] = (1, 2, 5, 10, 100),
+        include_per_depth_stats: bool = True,
+    ) -> dict[str, Any]:
         """Compute statistics of the partition tree.
+        Args:
+            alphas: List of alpha values for which to compute moment statistics (e.g., 1 for average, 2 for variance).
+            include_per_depth_stats: Whether to include per-depth statistics.
 
         Returns:
             dict: A dictionary with statistics including:
                 - total_nodes: Total number of nodes in the tree.
-                - max_depth: Maximum depth of the tree.
                 - avg_depth: Average depth of leaf nodes.
+                - max_depth: Maximum depth of the tree.
                 - avg_candidates: Average number of candidates per node.
+                - avg_inequalities: Average number of inequalities per node.
+                - avg_vertices: Average number of vertices per node.
                 - per_depth_nodes: Number of nodes at each depth.
                 - per_depth_avg_candidates: Average number of candidates per node at each depth.
-                - avg_inequalities_per_node: Average number of inequalities per node.
                 - per_depth_avg_inequalities: Average number of inequalities per node at each depth.
-                - avg_vertices_per_node: Average number of vertices per node.
                 - per_depth_avg_vertices: Average number of vertices per node at each depth.
+                - per_depth_moments_candidates: Moments of candidates per depth for specified alphas.
+                - per_depth_moments_inequalities: Moments of inequalities per depth for specified alphas.
+                - per_depth_moments_vertices: Moments of vertices per depth for specified alphas.
         """
         total_nodes = 0
         max_depth = 0
@@ -183,31 +205,50 @@ class PartitionTree:
         leaf_count = 0
 
         # Compute avg_candidates, avg_candidates per depth and number of nodes per depth
-        avg_candidates = 0
         per_depth_counts = {}
-        per_depth_candidate_sums = {}
+        avg_candidates = 0
         avg_inequalities = 0
-        per_depth_inequality_sums = {}
         avg_vertices = 0
+        per_depth_candidate_sums = {}
+        per_depth_inequality_sums = {}
         per_depth_vertex_sums = {}
+        per_depth_moments_candidates = {alpha: {} for alpha in alphas}
+        per_depth_moments_inequalities = {alpha: {} for alpha in alphas}
+        per_depth_moments_vertices = {alpha: {} for alpha in alphas}
 
         stack = [self.root]
         while stack:
             node = stack.pop()
             total_nodes += 1
             avg_candidates += node.n_candidates
+            avg_inequalities += node.n_inequalities
+            avg_vertices += node.n_vertices
+            # Update per-depth counts and sums
             per_depth_counts[node.depth] = per_depth_counts.get(node.depth, 0) + 1
             per_depth_candidate_sums[node.depth] = (
                 per_depth_candidate_sums.get(node.depth, 0) + node.n_candidates
             )
-            avg_inequalities += node.n_inequalities
             per_depth_inequality_sums[node.depth] = (
                 per_depth_inequality_sums.get(node.depth, 0) + node.n_inequalities
             )
-            avg_vertices += node.n_vertices
             per_depth_vertex_sums[node.depth] = (
                 per_depth_vertex_sums.get(node.depth, 0) + node.n_vertices
             )
+            # Compute moments
+            for alpha in alphas:
+                per_depth_moments_candidates[alpha][node.depth] = (
+                    per_depth_moments_candidates[alpha].get(node.depth, 0)
+                    + node.n_candidates**alpha
+                )
+                per_depth_moments_inequalities[alpha][node.depth] = (
+                    per_depth_moments_inequalities[alpha].get(node.depth, 0)
+                    + node.n_inequalities**alpha
+                )
+                per_depth_moments_vertices[alpha][node.depth] = (
+                    per_depth_moments_vertices[alpha].get(node.depth, 0)
+                    + node.n_vertices**alpha
+                )
+
             if node.depth > max_depth:
                 max_depth = node.depth
             if not node.children:  # Leaf node
@@ -220,27 +261,49 @@ class PartitionTree:
         avg_candidates /= total_nodes
         avg_inequalities /= total_nodes
         avg_vertices /= total_nodes
+        # Normalize moments
+        for alpha in alphas:
+            for depth in per_depth_moments_candidates[alpha]:
+                count = per_depth_counts[depth]
+                per_depth_moments_candidates[alpha][depth] /= count
+                per_depth_moments_candidates[alpha][depth] **= 1 / alpha
+            for depth in per_depth_moments_inequalities[alpha]:
+                count = per_depth_counts[depth]
+                per_depth_moments_inequalities[alpha][depth] /= count
+                per_depth_moments_inequalities[alpha][depth] **= 1 / alpha
+            for depth in per_depth_moments_vertices[alpha]:
+                count = per_depth_counts[depth]
+                per_depth_moments_vertices[alpha][depth] /= count
+                per_depth_moments_vertices[alpha][depth] **= 1 / alpha
         self._stat_dict = {
             "total_nodes": total_nodes,
-            "max_depth": max_depth,
             "avg_depth": avg_depth,
+            "max_depth": max_depth,
             "per_depth_nodes": per_depth_counts,
             "avg_candidates": avg_candidates,
+            "avg_inequalities": avg_inequalities,
+            "avg_vertices": avg_vertices,
             "per_depth_avg_candidates": {
                 depth: per_depth_candidate_sums[depth] / count
                 for depth, count in per_depth_counts.items()
             },
-            "avg_inequalities_per_node": avg_inequalities,
             "per_depth_avg_inequalities": {
                 depth: per_depth_inequality_sums[depth] / count
                 for depth, count in per_depth_counts.items()
             },
-            "avg_vertices_per_node": avg_vertices,
             "per_depth_avg_vertices": {
                 depth: per_depth_vertex_sums[depth] / count
                 for depth, count in per_depth_counts.items()
             },
+            "per_depth_moments_candidates": per_depth_moments_candidates,
+            "per_depth_moments_inequalities": per_depth_moments_inequalities,
+            "per_depth_moments_vertices": per_depth_moments_vertices,
         }
+        # Remove per-depth stats if not requested
+        if not include_per_depth_stats:
+            for key in list(self._stat_dict.keys()):
+                if "per_depth" in key:
+                    del self._stat_dict[key]
         return self._stat_dict
 
     def print_stats(self, include_per_depth_stats: bool = False) -> None:
@@ -262,7 +325,7 @@ def choose_best_split(
     polytope: Polytope,
     candidates: Sequence[Hyperplane],
     strategy: SplitStrategy = "v-entropy",
-    remove_redundancies: bool = False,
+    remove_redundancies: bool = True,
 ) -> Tuple[
     Optional[Hyperplane],
     Optional[Tuple[Polytope, Polytope]],
@@ -341,7 +404,8 @@ def build_partition_tree(
     polytope: Polytope,
     hyperplanes: Sequence[Hyperplane],
     strategy: SplitStrategy = "v-entropy",
-    remove_redundancies: bool = False,
+    remove_redundancies: bool = True,
+    verbose: bool = False,
 ) -> Tuple[PartitionTree, int]:
     """Build a partition tree by recursively splitting a polytope with hyperplanes.
 
@@ -355,6 +419,8 @@ def build_partition_tree(
         strategy: Strategy for selecting hyperplanes at each split:
             - "random": Random selection among intersecting hyperplanes
             - "v-entropy": Select hyperplane maximizing entropy approximation
+        remove_redundancies: Whether to remove redundant inequalities after splits.
+        verbose: If True, prints progress information during tree construction.
 
     Returns:
         Tuple containing:
@@ -394,7 +460,7 @@ def build_partition_tree(
             n_partitions += 1
 
             # Progress reporting for large partitions
-            if prev_partitions != n_partitions and n_partitions % 1000 == 0:
+            if verbose and prev_partitions != n_partitions and n_partitions % 1000 == 0:
                 print(f"Found {n_partitions} chambers...")
                 prev_partitions = n_partitions
         else:

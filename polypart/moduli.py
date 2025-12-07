@@ -63,6 +63,7 @@ def get_planes(
     """Get stability walls for moduli space of n points with rank r and degree d.
     If use_epsilons is True, dimension is reduced by n.
     """
+    assert n >= 1, "Number of parabolic points must be at least 1"
     planes = []
     for r_prime in range(1, r // 2 + 1):
         new_planes = []

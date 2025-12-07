@@ -23,12 +23,12 @@ from .volume import volume_nmz
 class Hyperplane:
     """Affine hyperplane boundary.
 
-    Represents the affine hyperplane given by ``normal · x = offset``. We
-    adopt the halfspace convention ``normal · x ≤ offset``.
+    Represents the affine hyperplane given by ``normal · x = offset``.
+    When used as halfspace, we adopt the convention ``normal · x ≤ offset``.
 
     Args:
-        normal (FractionVector): normal vector (dtype=object numpy array).
-        offset (Fraction): scalar offset.
+        normal (FractionVector)
+        offset (Fraction)
     """
 
     def __init__(self, normal: Iterable[NumberLike], offset: NumberLike) -> None:
@@ -49,6 +49,14 @@ class Hyperplane:
         )
         return Hyperplane(normal, offset)
 
+    def as_tuple(self) -> Tuple[FractionVector, Fraction]:
+        """Return hyperplane as (normal, offset) tuple."""
+        return self.normal, self.offset
+
+    def as_coefficients(self) -> FractionVector:
+        """Return hyperplane as coefficients [a1, ..., ad, b] for a1*x1 + ... + ad*xd = b."""
+        return np.append(self.normal, self.offset)
+
     def flip(self) -> """Hyperplane""":
         """Return a new Hyperplane with normal and offset negated."""
         # Avoid init checks by directly creating instance
@@ -63,6 +71,10 @@ class Hyperplane:
 
     def __repr__(self) -> str:
         return f"Hyperplane(normal=[{' '.join(str(a) for a in self.normal)}], offset={self.offset})"
+
+    def __call__(self, x: FractionVector) -> Fraction:
+        """Evaluate the hyperplane equation normal · x - offset."""
+        return np.dot(self.normal, x) - self.offset
 
 
 class Polytope:
@@ -92,6 +104,18 @@ class Polytope:
         self._volume: Optional[Fraction] = None
         self._diameter: Optional[Fraction] = None
         self._dim: int = A.shape[1]
+
+    @property
+    def n_inequalities(self) -> int:
+        """Number of inequalities in H-representation."""
+        return self._A.shape[0]
+
+    @property
+    def n_vertices(self) -> int:
+        """Number of vertices in V-representation."""
+        if self._vertices is None:
+            raise ValueError("Vertices not computed yet. Call .extreme() first.")
+        return self._vertices.shape[0]
 
     @property
     def A(self) -> FractionMatrix:
@@ -231,9 +255,10 @@ class Polytope:
         mat.rep_type = cdd.gmp.RepType.INEQUALITY
         polyhedron = cdd.gmp.polyhedron_from_matrix(mat)
         # Convert to .ftyping.FractionMatrix
-        V = as_fraction_matrix(cdd.gmp.copy_generators(polyhedron).array)
-        if V.size == 0:
+        verts = cdd.gmp.copy_generators(polyhedron).array
+        if len(verts) == 0:
             raise ValueError("Empty vertex set. The H-rep might be infeasible.")
+        V = as_fraction_matrix(verts)
         if not np.all([v == 1 for v in V[:, 0]]):
             raise ValueError("Inequalities do not represent a bounded polytope.")
         self._vertices = V[:, 1:]
@@ -293,10 +318,11 @@ class Polytope:
             # If any vertex satisfies the inequality at equality, it's not redundant
             if np.any(values[:, i] == self._b[i, 0]):
                 to_keep.append(i)
+
         return self._A[to_keep, :], self._b[to_keep, :]
 
     def split_by_hyperplane(
-        self, hyperplane: Hyperplane, remove_redundancies: bool = False
+        self, hyperplane: Hyperplane, remove_redundancies: bool = True
     ) -> tuple["Polytope", "Polytope"]:
         """Split the polytope by a hyperplane.
 
