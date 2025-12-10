@@ -189,8 +189,6 @@ class kFaceCDDBackend:
         hyperplanes: Sequence[Tuple[np.ndarray, float]],
         support: Sequence[Tuple[np.ndarray, float]],
     ) -> None:
-        if not support:
-            raise ValueError("At least one inequality is required.")
         if not hyperplanes:
             raise ValueError("At least one hyperplane is required.")
 

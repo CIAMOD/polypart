@@ -8,14 +8,10 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 # ----------------------------------------------
 
-import argparse
-import importlib.util
 import multiprocessing
 import multiprocessing.pool
-import sys
 import traceback
 from multiprocessing import cpu_count
-from pathlib import Path
 
 from tqdm import tqdm
 
@@ -58,13 +54,13 @@ def experiment_batch_worker(task_data):
     3. That method will spawn 3 internal processes (PolyPart, IncEnu, DelRes).
     4. Data is aggregated and saved by the Experiment class itself.
     """
-    exp, run_idx, seed, decimals = task_data
+    exp, run_idx, seed, decimals, folder = task_data
 
     try:
         # Call the new method we added to experiments.py
         # We don't need the return value here, just the success status
         results = exp.run_parallel_isolated(decimals=decimals, seed=seed)
-        exp.save(results, folder="../data/cluster")
+        exp.save(results, folder=folder)
         return {"status": "success", "name": exp.dirname(), "run": run_idx}
 
     except Exception as e:
@@ -78,7 +74,9 @@ def experiment_batch_worker(task_data):
         }
 
 
-def run_parallel_batch(experiments, n_runs=10, max_workers=None):
+def run_parallel_batch(
+    experiments, n_runs=10, max_workers=None, folder="../data/cluster"
+):
     """
     Orchestrates the parallel execution.
     """
@@ -107,6 +105,7 @@ def run_parallel_batch(experiments, n_runs=10, max_workers=None):
                 run,
                 42 + run,  # Deterministic seed
                 3,  # decimals
+                folder,
             )
             tasks.append(task_args)
 
@@ -138,70 +137,3 @@ def run_parallel_batch(experiments, n_runs=10, max_workers=None):
     )
     if results_summary["error"] > 0:
         print("Check 'batch_errors.log' for details.")
-
-
-def load_experiments_from_file(filepath):
-    """Dynamically loads the 'experiments' list from a python file."""
-    path = Path(filepath).resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-
-    spec = importlib.util.spec_from_file_location("dynamic_config", path)
-    module = importlib.util.module_from_spec(spec)
-
-    # Add the config file's directory to sys.path so it can handle its own imports
-    sys.path.insert(0, str(path.parent))
-
-    try:
-        spec.loader.exec_module(module)
-    except Exception as e:
-        print(f"Error loading config file: {e}")
-        raise
-
-    if not hasattr(module, "experiments"):
-        raise ValueError(
-            f"File {filepath} must define a list variable named 'experiments'"
-        )
-
-    return module.experiments
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run PolyPart experiments in parallel."
-    )
-
-    # Argument 1: The config file path
-    parser.add_argument(
-        "config",
-        type=str,
-        help="Path to the python config file defining 'experiments = [...]'",
-    )
-
-    # Argument 2: Number of runs per experiment
-    parser.add_argument(
-        "-r",
-        "--runs",
-        type=int,
-        default=10,
-        help="Number of times to run each experiment (default: 10)",
-    )
-
-    # Argument 3: Max Workers (Concurrent Experiments)
-    parser.add_argument(
-        "-w",
-        "--workers",
-        type=int,
-        default=None,
-        help="Number of concurrent experiments (default: (CPUs-2)//3)",
-    )
-
-    args = parser.parse_args()
-
-    # Load and Run
-    try:
-        exps = load_experiments_from_file(args.config)
-        run_parallel_batch(exps, n_runs=args.runs, max_workers=args.workers)
-    except Exception as e:
-        print(f"Fatal Error: {e}")
-        traceback.print_exc()

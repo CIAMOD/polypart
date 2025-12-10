@@ -44,8 +44,9 @@ except ImportError:
 
 
 class PolytopeClass:
-    def __init__(self, name: str):
+    def __init__(self, name: str, bbox_mode: bool = False):
         self.name = name
+        self.bbox_mode = bbox_mode
 
     def get_polytope(
         self, d: int, decimals: int | None = None, seed: int | None = None
@@ -64,7 +65,7 @@ class PolytopeClass:
             raise ValueError(f"Unknown polytope class: {self.name}")
 
     def __str__(self):
-        return self.name
+        return self.name + ("_bb" if self.bbox_mode else "")
 
 
 class ArrangementClass:
@@ -105,72 +106,6 @@ class ArrangementClass:
             return f"moduli_n{self.n}_r{self.r}"
         else:
             return self.name
-
-
-def _run_single_algorithm_isolated(args):
-    """
-    Regenerates the environment and runs ONE algorithm.
-    Returns timings, memory, result count, and geometry stats.
-    """
-    # Unpack arguments
-    p_class, a_class, d, decimals, seed, algo_name = args
-
-    # --- 1. Regenerate Geometry (Measure Overhead) ---
-    t0 = time.perf_counter()
-    P = p_class.get_polytope(d, decimals=decimals, seed=seed)
-    P.remove_redundancies()
-    P.extreme()
-    t1 = time.perf_counter()
-    p_creation_time = t1 - t0
-
-    t0 = time.perf_counter()
-    A = a_class.get_arrangement(d, P, decimals=decimals, seed=seed)
-    t1 = time.perf_counter()
-    a_creation_time = t1 - t0
-
-    # --- 2. Run Specific Algorithm ---
-    start_time = time.perf_counter()
-    num_regions = None
-    stats = None
-
-    if algo_name == "ppart":
-        T, num_regions = build_partition_tree(P, A, "v-entropy")
-        stats = T.stats()
-
-    elif algo_name == "incenu":
-        _, num_regions = build_tree_inc_enu(A, P)
-
-    elif algo_name == "delres":
-        num_regions = number_of_regions(A, P)
-
-    end_time = time.perf_counter()
-
-    # --- 3. Measure Peak RAM ---
-    if HAS_RESOURCE:
-        mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
-    elif HAS_PSUTIL:
-        process = psutil.Process(os.getpid())
-        mem_usage = process.memory_info().rss / (1024.0 * 1024.0)
-    else:
-        mem_usage = -1.0  # Unknown
-
-    return {
-        "algo": algo_name,
-        "time": round(end_time - start_time, 6),
-        "peak_ram_mb": round(mem_usage, 2),
-        "num_regions": num_regions,
-        "stats": stats,
-        # Capture geometry stats from this worker
-        "n_vertices": P.n_vertices,
-        "n_facets": P.n_inequalities,
-        "m_hyperplanes": len(A),
-        "p_creation_time": round(p_creation_time, 6),
-        "a_creation_time": round(a_creation_time, 6),
-        # Hash for P as the str of list of vertices
-        "p_hash": hash(tuple(map(tuple, P.vertices))),
-        # Hash for A as the str of list of Hyperplane (h.normal and h.offset)
-        "a_hash": hash(tuple((tuple(h.normal), h.offset) for h in A)),
-    }
 
 
 class Experiment:
@@ -258,11 +193,13 @@ class Experiment:
             "incenu_time": elapsed_time_incenu,
             "delres_time": elapsed_time_num_regions,
             "num_regions": num_regions,
+            "dim": self.dim(),
             "n_vertices": P.n_vertices,
             "n_facets": P.n_inequalities,
             "m_hyperplanes": len(A),
             "ppart_stats": ppart_stats,
             "decimals": decimals,
+            "seed": seed,
         }
         self._last_results = result
         return result
@@ -334,6 +271,7 @@ class Experiment:
             "incenu_time": None,
             "delres_time": None,
             "num_regions": first_count,  # Validated above
+            "dim": self.dim(),
             # Geometry Stats (Validated above)
             "n_vertices": base_info["n_vertices"],
             "n_facets": base_info["n_facets"],
@@ -347,6 +285,7 @@ class Experiment:
             "a_creation_time": base_info["a_creation_time"],
             "ppart_stats": None,
             "decimals": decimals,
+            "seed": seed,
         }
 
         # Populate Algorithm-Specific Data
@@ -370,18 +309,23 @@ class Experiment:
 
     def save(self, results: dict, folder: str = "../data"):
         path = Path(folder) / self.dirname()
-        # Ensure the folder exists or create it
+        # mkdir is thread-safe enough for creating the parent folder
         path.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 1. Generate unique components
+        timestamp = datetime.now().strftime(r"%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
-        filename = f"experiment_{timestamp}_{unique_id}.json"
+
+        # 2. Construct Filename
+        seed = results.get("seed", None)
+        if seed is not None:
+            filename = f"experiment_{timestamp}_seed{seed}.json"
+        else:
+            filename = f"experiment_{timestamp}_{unique_id}.json"
+
         filepath = path / filename
-        # Check if file already exists, add a counter if so
-        counter = 1
-        while filepath.exists():
-            filename = f"experiment_{timestamp}_{counter}_{unique_id}.json"
-            filepath = path / filename
-            counter += 1
+
+        # 3. Write to File
         with open(filepath, "w") as f:
             json.dump(results, f, indent=4)
 
@@ -389,20 +333,98 @@ class Experiment:
         path = Path(folder) / self.dirname()
         results = []
         if not path.exists():
-            raise FileNotFoundError(f"No results found for experiment at {path}")
+            return results
         for filename in os.listdir(path):
             if filename.endswith(".json"):
                 filepath = path / filename
                 with open(filepath, "r") as f:
                     data = json.load(f)
                     results.append(data)
-        if results == []:
-            raise FileNotFoundError(f"No result jsons found for experiment at {path}")
         return results
+
+    def count_existing_runs(self, folder: str = "../data") -> int:
+        """
+        Counts how many result files already exist for this specific experiment configuration.
+        """
+        path = Path(folder) / self.dirname()
+        if not path.exists():
+            return 0
+
+        # Count JSON files that look like experiment results
+        # Assuming filename format: experiment_TIMESTAMP_UNIQUEID.json
+        # or run_SEED_ALGO_TIMESTAMP.json (from parallel runner)
+        count = 0
+        for filename in os.listdir(path):
+            if filename.endswith(".json"):
+                count += 1
+        return count
 
     def __str__(self):
         d = self.d if self.d is not None else self.P_class.n * (self.P_class.r - 1)
         return f"Experiment(P={self.P_class}, A={self.A_class}, d={d})"
+
+
+def _run_single_algorithm_isolated(args):
+    """
+    Regenerates the environment and runs ONE algorithm.
+    Returns timings, memory, result count, and geometry stats.
+    """
+    # Unpack arguments
+    p_class, a_class, d, decimals, seed, algo_name = args
+
+    # --- 1. Regenerate Geometry (Measure Overhead) ---
+    t0 = time.perf_counter()
+    P = p_class.get_polytope(d, decimals=decimals, seed=seed)
+    P.remove_redundancies()
+    P.extreme()
+    t1 = time.perf_counter()
+    p_creation_time = t1 - t0
+
+    t0 = time.perf_counter()
+    A = a_class.get_arrangement(d, P, decimals=decimals, seed=seed)
+    t1 = time.perf_counter()
+    a_creation_time = t1 - t0
+
+    # --- 2. Run Specific Algorithm ---
+    start_time = time.perf_counter()
+    num_regions = None
+    if algo_name == "ppart":
+        T, num_regions = build_partition_tree(P, A, "v-entropy")
+    elif algo_name == "incenu":
+        _, num_regions = build_tree_inc_enu(A, [] if p_class.bbox_mode else P)
+    elif algo_name == "delres":
+        num_regions = number_of_regions(A, [] if p_class.bbox_mode else P)
+    end_time = time.perf_counter()
+
+    # --- Collect Stats of polypart if applicable ---
+    stats = T.stats() if algo_name == "ppart" else None
+
+    # --- 3. Measure Peak RAM ---
+    if HAS_RESOURCE:
+        mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    elif HAS_PSUTIL:
+        process = psutil.Process(os.getpid())
+        mem_usage = process.memory_info().rss / (1024.0 * 1024.0)
+    else:
+        mem_usage = -1.0  # Unknown
+
+    return {
+        "algo": algo_name,
+        "time": round(end_time - start_time, 6),
+        "peak_ram_mb": round(mem_usage, 2),
+        "num_regions": num_regions,
+        "stats": stats,
+        # Capture geometry stats from this worker
+        "n_vertices": P.n_vertices,
+        "n_facets": P.n_inequalities,
+        "m_hyperplanes": len(A),
+        "p_creation_time": round(p_creation_time, 6),
+        "a_creation_time": round(a_creation_time, 6),
+        # Hash for P as the str of list of vertices
+        "p_hash": hash(tuple(map(tuple, P.vertices))),
+        # Hash for A as the str of list of Hyperplane (h.normal and h.offset)
+        "a_hash": hash(tuple((tuple(h.normal), h.offset) for h in A)),
+    }
 
 
 def run_experiments(
@@ -413,21 +435,25 @@ def run_experiments(
 ):
     if isinstance(experiments, Experiment):
         experiments = [experiments]
-    # Show number of run in tqdm as label
+
     tqdm_experiments = tqdm(experiments)
     for exp in tqdm_experiments:
+        existing_count = exp.count_existing_runs(folder=folder)
+        start_seed_offset = existing_count
         for run in range(n_runs):
+            # The seed now continues from where the last batch left off
+            current_seed = 42 + start_seed_offset + run
             tqdm_experiments.set_description(f"(run {run + 1}/{n_runs})")
             results = exp.run(
                 decimals=3,
-                seed=42 + run,
+                seed=current_seed,
                 tqdm_bar=tqdm_experiments,
                 exclude_algorithms=exclude_algorithms,
             )
             exp.save(results, folder=folder)
 
 
-def summarize_results(
+def print_results_summary(
     experiments: list[Experiment] | Experiment, folder: str = "../data"
 ):
     def mean_std(times: list[float]) -> tuple[float, float]:
@@ -442,10 +468,9 @@ def summarize_results(
 
     # Collect stats of experiments
     for exp in experiments:
-        try:
-            all_results = exp.load(folder=folder)
-        except FileNotFoundError as e:
-            print("Skipping experiment:", e)
+        all_results = exp.load(folder=folder)
+        if len(all_results) == 0:
+            print(f"No results found for experiment {exp.dirname()}")
             continue
         # Compute average times, std of times and probability of time_polypart<time_incenu
         polypart_times = [
@@ -481,214 +506,6 @@ def summarize_results(
             f"  P(PolyPart < IncEnu): {prob_polypart_better_str}\n"
         )
 
-
-def plot_experiment_summary(experiment: Experiment):
-    """
-    Summary plot of all runs of an experiment, showing overall statistics
-    and moments plots per depth.
-    """
-    try:
-        all_results = experiment.load()
-    except FileNotFoundError:
-        print(f"No experiment found with path {experiment.dirname()}")
-        return
-
-    # Filter all_results without per_depth_moments_vertices
-    all_results = [
-        res
-        for res in all_results
-        if res["ppart_stats"] is not None
-        and "per_depth_moments_vertices" in res["ppart_stats"]
-    ]
-    if len(all_results) == 0:
-        print(f"No per-depth moments data found for experiment {experiment.dirname()}")
-        return
-
-    # Collect times per depth
-    alphas = all_results[-1]["ppart_stats"]["per_depth_moments_vertices"].keys()
-    all_per_depth_moments_candidates = {alpha: {} for alpha in alphas}
-    all_per_depth_moments_inequalities = {alpha: {} for alpha in alphas}
-    all_per_depth_moments_vertices = {alpha: {} for alpha in alphas}
-    for res in all_results:
-        ppart_stats = res["ppart_stats"]
-        moments_candidates = ppart_stats["per_depth_moments_candidates"]
-        moments_inequalities = ppart_stats["per_depth_moments_inequalities"]
-        moments_vertices = ppart_stats["per_depth_moments_vertices"]
-        for alpha in alphas:
-            if alpha in moments_candidates:
-                for depth, moment in moments_candidates[alpha].items():
-                    if depth not in all_per_depth_moments_candidates[alpha]:
-                        all_per_depth_moments_candidates[alpha][depth] = []
-                    all_per_depth_moments_candidates[alpha][depth].append(moment)
-            else:
-                continue
-            if alpha in moments_inequalities:
-                for depth, moment in moments_inequalities[alpha].items():
-                    if depth not in all_per_depth_moments_inequalities[alpha]:
-                        all_per_depth_moments_inequalities[alpha][depth] = []
-                    all_per_depth_moments_inequalities[alpha][depth].append(moment)
-            else:
-                continue
-            if alpha in moments_vertices:
-                for depth, moment in moments_vertices[alpha].items():
-                    if depth not in all_per_depth_moments_vertices[alpha]:
-                        all_per_depth_moments_vertices[alpha][depth] = []
-                    all_per_depth_moments_vertices[alpha][depth].append(moment)
-            else:
-                continue
-
-    # Data Extraction
-    # -------------------------------------------------------------------------
-    # Extract raw lists, ensuring we handle None values safely
-    regions_list = [
-        res["num_regions"] for res in all_results if res.get("num_regions") is not None
-    ]
-
-    # Times (PolyPart, IncEnu, and the newly requested DelRes)
-    polypart_times = [
-        res["polypart_time"]
-        for res in all_results
-        if res.get("polypart_time") is not None
-    ]
-    incenu_times = [
-        res["incenu_time"] for res in all_results if res.get("incenu_time") is not None
-    ]
-    delres_times = [
-        res["delres_time"] for res in all_results if res.get("delres_time") is not None
-    ]
-
-    # Calculate Region Statistics for the subtitle
-    avg_regions = np.mean(regions_list) if regions_list else 0
-    std_regions = np.std(regions_list) if regions_list else 0
-
-    # Plotting
-    # -------------------------------------------------------------------------
-    # 2x2 Grid: Efficient use of space
-    fig, axs = plt.subplots(
-        2, 2, figsize=(18, 12)
-    )  # Increased height slightly for better aspect ratio
-
-    fig.suptitle(
-        f"Experiment Summary: {experiment.dirname()} (runs={len(all_results)})",
-        fontsize=18,
-        y=0.95,
-    )
-
-    # --- 1. Top-Left: Time Box Plot (Sorted) ---
-    ax_time = axs[0, 0]
-
-    # Structure data for sorting: (Data List, Label, Color)
-    raw_time_data = [
-        (polypart_times, "PolyPart", "#1f77b4"),  # Blue
-        (incenu_times, "IncEnu", "#ff7f0e"),  # Orange
-        (delres_times, "DelRes", "#2ca02c"),  # Green
-    ]
-    # Print mean times for debugging
-    for data, label, _ in raw_time_data:
-        if data:
-            mean_time = np.mean(data)
-            print(f"{label} mean time: {mean_time:.6f} seconds over {len(data)} runs")
-        else:
-            print(f"{label} has no data.")
-
-    # Sort by mean value (ascending) -> Fastest first
-    # Handle empty lists by assigning infinity so they drop to the bottom
-    sorted_time_data = sorted(
-        raw_time_data, key=lambda x: np.mean(x[0]) if len(x[0]) > 0 else float("inf")
-    )
-
-    # Unpack sorted data
-    plot_data = [item[0] for item in sorted_time_data]
-    plot_labels = [item[1] for item in sorted_time_data]
-    plot_colors = [item[2] for item in sorted_time_data]
-
-    # Create horizontal boxplot
-    bplot = ax_time.boxplot(
-        plot_data,
-        vert=False,
-        patch_artist=True,
-        labels=plot_labels,
-        widths=0.6,
-        # Show the Mean Line
-        showmeans=True,
-        meanline=True,
-        # Style the Mean
-        meanprops={"color": "black", "linewidth": 2.5, "linestyle": "-"},
-        # Style the Median
-        medianprops={"color": "red", "linewidth": 1, "linestyle": "--"},
-    )
-
-    # Apply colors to the sorted boxes
-    for patch, color in zip(bplot["boxes"], plot_colors):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.6)
-
-    # Invert Y-axis so the first item (fastest/lowest mean) is at the TOP
-    ax_time.invert_yaxis()
-
-    # Set Title with Region Stats
-    region_stats_str = f"Avg regions: ${int(avg_regions)} \pm {int(std_regions)}$"
-    ax_time.set_title(f"Execution Times ({region_stats_str})", fontsize=14)
-    ax_time.set_xlabel("Time (seconds)")
-    ax_time.grid(True, axis="x", linestyle="--", alpha=0.5)
-
-    # --- 2, 3, 4. The Moment Plots ---
-    # Define configuration to map data to specific subplots
-    # Order: Top-Right -> Bottom-Left -> Bottom-Right
-    moment_configs = [
-        (all_per_depth_moments_candidates, "$|A_k|$", axs[0, 1]),
-        (all_per_depth_moments_inequalities, "$|P_k|$", axs[1, 0]),
-        (all_per_depth_moments_vertices, "$|V_k|$", axs[1, 1]),
-    ]
-
-    for all_per_depth_moments, ylabel, ax in moment_configs:
-        for alpha in alphas:
-            # Sort depths numerically
-            depths = sorted(all_per_depth_moments[alpha].keys(), key=lambda x: int(x))
-
-            if not depths:
-                continue
-
-            # Calculate stats
-            avg_moments = [
-                np.mean(all_per_depth_moments[alpha][depth]) for depth in depths
-            ]
-            std_moments = [
-                np.std(all_per_depth_moments[alpha][depth]) for depth in depths
-            ]
-
-            # Plot Line
-            ax.plot(
-                depths,
-                avg_moments,
-                label=f"$\\alpha={alpha}$",
-                marker="o",
-                markersize=4,
-            )
-
-            # Plot Std Dev Shade
-            ax.fill_between(
-                depths,
-                np.array(avg_moments) - np.array(std_moments),
-                np.array(avg_moments) + np.array(std_moments),
-                alpha=0.15,
-            )
-
-        ax.set_title(f"Per-Depth Moments of {ylabel}", fontsize=14)
-        ax.set_xlabel("Depth")
-        ax.set_ylabel(ylabel)
-        ax.legend(loc="upper right", fontsize="small")
-        ax.grid(True, alpha=0.3)
-
-    # Final Layout Adjustment
-    # plt.tight_layout(rect=[0, 0.03, 1, 0.95], pad=3.0)
-    plt.tight_layout(pad=3.0)
-    plt.show()
-
-
-# recieve sys args to create an experiment and run it n_runs times
-# Usages:
-# python experiment.py -d 3 -p cube -a braid -m 5 (optional) -r 0.2 (otional) -n 10 (optional, default 1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run polytope partition experiments.")
@@ -729,4 +546,4 @@ if __name__ == "__main__":
     A_class = ArrangementClass(args.a, m=args.m, degen_ratio=args.r)
     experiment = Experiment(P_class, A_class, d=args.d)
     run_experiments(experiment, n_runs=args.n)
-    summarize_results(experiment)
+    print_results_summary(experiment)

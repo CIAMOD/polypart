@@ -175,7 +175,7 @@ class PartitionTree:
 
     def stats(
         self,
-        alphas: list[int] = (1, 2, 5, 10, 100),
+        alphas: list[int | str] = (1, 2, 5, 10, "inf"),
         include_per_depth_stats: bool = True,
     ) -> dict[str, Any]:
         """Compute statistics of the partition tree.
@@ -236,6 +236,20 @@ class PartitionTree:
             )
             # Compute moments
             for alpha in alphas:
+                if alpha == "inf":
+                    per_depth_moments_candidates[alpha][node.depth] = max(
+                        per_depth_moments_candidates[alpha].get(node.depth, 0),
+                        node.n_candidates,
+                    )
+                    per_depth_moments_inequalities[alpha][node.depth] = max(
+                        per_depth_moments_inequalities[alpha].get(node.depth, 0),
+                        node.n_inequalities,
+                    )
+                    per_depth_moments_vertices[alpha][node.depth] = max(
+                        per_depth_moments_vertices[alpha].get(node.depth, 0),
+                        node.n_vertices,
+                    )
+                    continue
                 per_depth_moments_candidates[alpha][node.depth] = (
                     per_depth_moments_candidates[alpha].get(node.depth, 0)
                     + node.n_candidates**alpha
@@ -261,20 +275,36 @@ class PartitionTree:
         avg_candidates /= total_nodes
         avg_inequalities /= total_nodes
         avg_vertices /= total_nodes
+
         # Normalize moments
         for alpha in alphas:
-            for depth in per_depth_moments_candidates[alpha]:
-                count = per_depth_counts[depth]
-                per_depth_moments_candidates[alpha][depth] /= count
-                per_depth_moments_candidates[alpha][depth] **= 1 / alpha
-            for depth in per_depth_moments_inequalities[alpha]:
-                count = per_depth_counts[depth]
-                per_depth_moments_inequalities[alpha][depth] /= count
-                per_depth_moments_inequalities[alpha][depth] **= 1 / alpha
-            for depth in per_depth_moments_vertices[alpha]:
-                count = per_depth_counts[depth]
-                per_depth_moments_vertices[alpha][depth] /= count
-                per_depth_moments_vertices[alpha][depth] **= 1 / alpha
+            if alpha == "inf":
+                continue
+            try:
+                for depth in per_depth_moments_candidates[alpha]:
+                    count = per_depth_counts[depth]
+                    per_depth_moments_candidates[alpha][depth] /= count
+                    per_depth_moments_candidates[alpha][depth] **= 1 / alpha
+            except ZeroDivisionError:
+                for depth in per_depth_moments_candidates[alpha]:
+                    per_depth_moments_candidates[alpha][depth] = "NaN"
+            try:
+                for depth in per_depth_moments_inequalities[alpha]:
+                    count = per_depth_counts[depth]
+                    per_depth_moments_inequalities[alpha][depth] /= count
+                    per_depth_moments_inequalities[alpha][depth] **= 1 / alpha
+            except ZeroDivisionError:
+                for depth in per_depth_moments_inequalities[alpha]:
+                    per_depth_moments_inequalities[alpha][depth] = "NaN"
+            try:
+                for depth in per_depth_moments_vertices[alpha]:
+                    count = per_depth_counts[depth]
+                    per_depth_moments_vertices[alpha][depth] /= count
+                    per_depth_moments_vertices[alpha][depth] **= 1 / alpha
+            except ZeroDivisionError:
+                for depth in per_depth_moments_vertices[alpha]:
+                    per_depth_moments_vertices[alpha][depth] = "NaN"
+
         self._stat_dict = {
             "total_nodes": total_nodes,
             "avg_depth": avg_depth,
