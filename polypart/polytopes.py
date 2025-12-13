@@ -179,7 +179,6 @@ def sample_poisson_zero_cell_polytope(
         tries += 1
 
         # Poisson number of hyperplanes intersecting B(0, R).
-        # Constant factor 2 is arbitrary up to rescaling of intensity.
         lambda_window = 2.0 * intensity * R
         N = rng.poisson(lam=lambda_window)
         if N < d + 1:

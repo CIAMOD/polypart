@@ -63,7 +63,7 @@ print("Number of regions:", n_parts)
 # Output: 'Number of regions: 4'
 ```
 
-## 🎯 Examples
+## Examples
 
 Complete Jupyter notebooks providing guided, reproducible demonstrations of how to use PolyPart are available in the [examples folder](https://github.com/ciamod/polypart/examples):
 
@@ -74,9 +74,27 @@ Complete Jupyter notebooks providing guided, reproducible demonstrations of how 
 - [**Moduli_Stability_Chambers.ipynb**](https://github.com/CIAMOD/polypart/tree/master/examples/Moduli_Stability_Chambers.ipynb)
   A higher-dimensional research application on moduli spaces of parabolic vector bundles.
 
-## Experiments
+## 🔬 Experiments
 
 Extensive computational experiments have been conducted to evaluate the performance and scalability of the PolyPart package. The experiment configurations, execution scripts, and results analysis notebooks are available in the [experiments folder](experiments/).
+
+<!-- - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - VECLIB_MAXIMUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1 -->
+
+**Reproducibility & Performance Configuration**
+
+To ensure accurate timing benchmarks and prevent _CPU oversubscription_, it is critical to force all mathematical backends to run in _single-threaded mode_. Set these before running any Python script or add them to your `docker-compose.yaml` / `Dockerfile`:
+
+```bash
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+```
 
 ## 📜 License
 
@@ -112,3 +130,7 @@ Special thanks to everyone who contributed to the project:
 
 - _David Alfaya, Sergio Herreros, Jaime Pizarroso, José Portela, and Javier Rodrigo_, **"A Computational Analysis of Ismorphism Classes of Moduli Spaces of Parabolic Vector Bundles"**, _in preparation_, 2025.
 - _David Alfaya, Sergio Herreros, Jaime Pizarroso and José Portela_, **"PolyPart: Exact Partitioning of Convex Polytopes uisng Decision Trees"**, _in preparation_, 2025.
+
+```
+
+```

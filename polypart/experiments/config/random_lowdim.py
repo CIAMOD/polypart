@@ -23,5 +23,5 @@ experiments = [
         d=d,
     )
     for m in [19]
-    for d in [4]
+    for d in [3, 4]
 ]

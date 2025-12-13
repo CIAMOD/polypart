@@ -1,87 +1,66 @@
 import argparse
-import importlib.util
 import sys
-import traceback
-from pathlib import Path
 
-from polypart.experiments.parallel import (
-    run_parallel_batch,
-)
+from . import cli_batch, cli_single
 
 
-def load_experiment_list_from_py(filepath):
-    """Dynamically loads the 'experiments' list from a python file."""
-    path = Path(filepath).resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-
-    spec = importlib.util.spec_from_file_location("dynamic_config", path)
-    module = importlib.util.module_from_spec(spec)
-
-    # Add the config file's directory to sys.path so it can handle its own imports
-    sys.path.insert(0, str(path.parent))
-
-    try:
-        spec.loader.exec_module(module)
-    except Exception as e:
-        print(f"Error loading config file: {e}")
-        raise
-
-    if not hasattr(module, "experiments"):
-        raise ValueError(
-            f"File {filepath} must define a list variable named 'experiments'"
-        )
-
-    return module.experiments
-
-
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
-        description="Run PolyPart experiments in parallel."
+        prog="polypart.experiments", description="Experiment runners"
     )
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Argument 1: The config file path
-    parser.add_argument(
-        "config",
-        type=str,
-        help="Path to the python config file defining 'experiments = [...]'",
-    )
+    sp_single = subparsers.add_parser("single", help="Run a single experiment")
+    sp_single.add_argument("-d", type=int, required=True)
+    sp_single.add_argument("-p", type=str, required=True)
+    sp_single.add_argument("-a", type=str, required=True)
+    sp_single.add_argument("-m", type=int, default=None)
+    sp_single.add_argument("--degen_ratio", type=float, default=0.0)
+    sp_single.add_argument("--n_runs", type=int, default=1)
+    sp_single.add_argument("--exclude", type=str, nargs="*", default=[])
+    sp_single.add_argument("-o", "--output", type=str, default="./data")
 
-    # Argument 2: Number of runs per experiment
-    parser.add_argument(
-        "-r",
-        "--runs",
-        type=int,
-        default=10,
-        help="Number of times to run each experiment (default: 10)",
-    )
-
-    # Argument 3: Max Workers (Concurrent Experiments)
-    parser.add_argument(
-        "-w",
-        "--workers",
-        type=int,
-        default=None,
-        help="Number of concurrent experiments (default: (CPUs-2)//3)",
-    )
-
-    # Argument 4: Output Folder
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=str,
-        default="../data/cluster",
-        help="Folder to save experiment results (default: ../data/cluster)",
-    )
+    sp_batch = subparsers.add_parser("batch", help="Run experiments from config")
+    sp_batch.add_argument("config", type=str)
+    sp_batch.add_argument("-r", "--runs", type=int, default=10)
+    sp_batch.add_argument("-w", "--workers", type=int, default=None)
+    sp_batch.add_argument("-o", "--output", type=str, default="./data/cluster")
+    sp_batch.add_argument("--exclude", type=str, nargs="*", default=[])
 
     args = parser.parse_args()
 
-    # Load and Run
-    try:
-        exps = load_experiment_list_from_py(args.config)
-        run_parallel_batch(
-            exps, n_runs=args.runs, max_workers=args.workers, folder=args.output
-        )
-    except Exception as e:
-        print(f"Fatal Error: {e}")
-        traceback.print_exc()
+    if args.command == "single":
+        # Reconstruct argv for cli_single
+        sys.argv = ["cli_single"] + [
+            "-d",
+            str(args.d),
+            "-p",
+            args.p,
+            "-a",
+            args.a,
+            "-m",
+            str(args.m) if args.m is not None else "0",
+            "--degen_ratio",
+            str(args.degen_ratio),
+            "--n_runs",
+            str(args.n_runs),
+            "-o",
+            args.output,
+            *(["--exclude", *args.exclude] if args.exclude else []),
+        ]
+        cli_single.main()
+    elif args.command == "batch":
+        sys.argv = ["cli_batch"] + [
+            args.config,
+            "-r",
+            str(args.runs),
+            *(["-w", str(args.workers)] if args.workers is not None else []),
+            "-o",
+            args.output,
+            *(["--exclude", *args.exclude] if args.exclude else []),
+        ]
+        cli_batch.main()
+
+
+if __name__ == "__main__":
+    main()

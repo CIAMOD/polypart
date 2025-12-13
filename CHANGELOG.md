@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - Unreleased
 
+- Added cli tool for running experiments from command line.
 - Fixed bug in experiment automatic seeding.
 - Migrated experiments to submodule `polypart.experiments`.
 - Fixed issue with "inf" moment calculation in partition tree statistics.

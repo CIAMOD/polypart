@@ -85,7 +85,13 @@ def run_normaliz_input(in_file: Path, normaliz_exe: str = "normaliz") -> Path:
     in_file = Path(in_file)
     # Run Normaliz in the same directory as the input file so output files
     # (.out, etc.) are created next to the input and can be cleaned up.
-    subprocess.run([normaliz_exe, str(in_file)], check=True, cwd=in_file.parent)
+    try:
+        subprocess.run([normaliz_exe, str(in_file)], check=True, cwd=in_file.parent)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Normaliz executable '{normaliz_exe}' not found. "
+            "Please ensure Normaliz is installed and in your system PATH."
+        )
     out_file = in_file.with_suffix(".out")
     if not out_file.exists():
         raise FileNotFoundError(f"Normaliz did not create {out_file}")
