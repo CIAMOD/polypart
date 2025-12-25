@@ -3,7 +3,6 @@ import json
 import os
 import uuid
 from datetime import datetime
-from multiprocessing import Pool
 from pathlib import Path
 
 from polypart.arrangements import (
