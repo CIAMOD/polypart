@@ -11,6 +11,8 @@ from polypart.delres import number_of_regions
 from polypart.inc_enu import build_tree_inc_enu
 from polypart.ppart import build_partition_tree
 
+from .stats import get_ppart_stats
+
 # --- SUPPORTED ALGORITHMS ---
 ALGORITHMS: tuple[str, ...] = ("ppart", "incenu", "delres")
 
@@ -31,7 +33,6 @@ except ImportError:
 # ------------------------------------
 
 
-# --- CUSTOM CLASS TO ALLOW NESTED POOLS ---
 class NoDaemonProcess(multiprocessing.Process):
     """A process that is not daemonic, allowing it to spawn children."""
 
@@ -75,9 +76,6 @@ def _run_single_algorithm_isolated(args):
         num_regions = number_of_regions(A, [] if bbox_mode else P)
     end_time = perf_counter()
 
-    # --- Collect Stats of polypart if applicable ---
-    stats = T.stats() if algo_name == "ppart" else None
-
     # --- 3. Measure Peak RAM ---
     if HAS_RESOURCE:
         mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
@@ -86,6 +84,9 @@ def _run_single_algorithm_isolated(args):
         mem_usage = process.memory_info().rss / (1024.0 * 1024.0)
     else:
         mem_usage = -1.0  # Unknown
+
+    # --- Collect Stats of polypart if applicable (after measuring memory) ---
+    stats = get_ppart_stats(T) if algo_name == "ppart" else None
 
     return {
         "algo": algo_name,

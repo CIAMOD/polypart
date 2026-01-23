@@ -61,6 +61,7 @@ def save_tree(root: PartitionTree, path: str) -> None:
         root: PartitionTree or root PartitionNode to serialize.
         path: output file path where JSON will be written.
     """
+
     tree_json = {
         "n_partitions": 0,
         "n_nodes": 0,
@@ -88,13 +89,13 @@ def save_tree(root: PartitionTree, path: str) -> None:
                 "centroid": (vector_to_str(node.centroid) if node.is_leaf else None),
             }
         )
-        if len(node.children) == 0:
+        if len(node._children) == 0:
             tree_json["n_partitions"] += 1
             tree_json["max_depth"] = max(tree_json["max_depth"], node.depth)
             tree_json["avg_depth"] += node.depth
 
         # enqueue children
-        queue.extend(node.children)
+        queue.extend(node._children)
 
     if tree_json["n_partitions"] > 0:
         tree_json["avg_depth"] = round(
@@ -135,7 +136,7 @@ def load_tree(path: str) -> PartitionTree:
         )
         # centroid
         if n.get("centroid") is not None:
-            node._centroid = str_to_vector(n["centroid"])
+            node.centroid = str_to_vector(n["centroid"])
         # cut
         ch = n.get("cut_hyperplane")
         if ch is not None:
@@ -152,6 +153,6 @@ def load_tree(path: str) -> PartitionTree:
         parent_idx = n.get("parent_idx")
         if parent_idx is not None:
             nodes[idx].parent = nodes[parent_idx]
-            nodes[parent_idx].children.append(nodes[idx])
+            nodes[parent_idx]._children.append(nodes[idx])
 
     return PartitionTree(nodes[0])

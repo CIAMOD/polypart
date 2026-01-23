@@ -22,7 +22,6 @@ class PartitionNode:
         depth (int): Depth of this node in the tree (root has depth 0).
         _children (List[PartitionNode]): Child nodes (empty for leaves).
         _cut (Optional[Hyperplane]): Cutting hyperplane for internal nodes.
-        _leaf_id (Optional[int]): Unique ID for leaf nodes, None for internal nodes.
         _witness (Optional[FractionVector]): Witness point for leaf nodes.
     """
 
@@ -34,57 +33,21 @@ class PartitionNode:
     _children: List["PartitionNode"] = field(
         default_factory=list, init=False, repr=False
     )
+    is_leaf: bool = field(default=False, init=False, repr=False)
 
     # Stored only for internal nodes
-    _cut: Optional[Hyperplane] = field(default=None, init=False, repr=False)
-    _witness: Optional[FractionVector] = field(default=None, init=False, repr=False)
+    cut: Optional[Hyperplane] = field(default=None, init=False, repr=False)
 
-    # Stored only for leaves, set by make_leaf()
-    _leaf_id: Optional[int] = field(default=None, init=False)
+    # Stored only for leaf nodes
+    witness: Optional[FractionVector] = field(default=None, init=False, repr=False)
 
-    @property
-    def is_leaf(self) -> bool:
-        """True if this node is a leaf (final partition), False otherwise."""
-        if not self._children and self.centroid is None:
-            raise RuntimeError(
-                "Node is neither leaf nor internal (inconsistent state)."
-            )
-        return not self._children
-
-    @property
-    def region_id(self) -> Optional[int]:
-        """ID for leaf nodes, None otherwise."""
-        return self._leaf_id
-
-    @property
-    def witness(self) -> np.ndarray:
-        """
-        Interior point (witness) for this node's partition.
-        """
-        if self._witness is None:
-            raise RuntimeError("Node has no witness assigned.")
-        return self._witness
-
-    def make_leaf(self, leaf_id: int, witness: FractionVector) -> None:
+    def make_leaf(self) -> None:
         """
         Mark this node as a leaf, assign its region id, and witness point.
         """
         if self._children:
-            raise RuntimeError("Cannot finalize a non-leaf node.")
-        self._leaf_id = leaf_id
-
-    def add_child(self, sign_vector: List[int]) -> "PartitionNode":
-        """Create and add a child node to this node.
-
-        Args:
-            sign_vector: Sign vector for the child node.
-
-        Returns:
-            PartitionNode: The newly created child node.
-        """
-        node = PartitionNode(sign_vector, parent=self, depth=self.depth + 1)
-        self._children.append(node)
-        return node
+            raise RuntimeError("Leaf node cannot have children.")
+        self._is_leaf = True
 
     def set_cut(self, cut: Hyperplane) -> None:
         """Set the cutting hyperplane for this internal node.
@@ -101,6 +64,19 @@ class PartitionNode:
             witness: Witness point as a fraction vector.
         """
         self._witness = witness
+
+    def add_child(self, sign_vector: List[int]) -> "PartitionNode":
+        """Create and add a child node to this node.
+
+        Args:
+            sign_vector: Sign vector for the child node.
+
+        Returns:
+            PartitionNode: The newly created child node.
+        """
+        node = PartitionNode(sign_vector, parent=self, depth=self.depth + 1)
+        self._children.append(node)
+        return node
 
     def classify(self, x: FractionVector) -> "PartitionNode":
         """Classify a point into the appropriate leaf node.
@@ -221,7 +197,7 @@ def inc_enu(
         Number of final partitions (leaf nodes) under this node.
     """
     stack = [root]
-    leaf_id = 0
+    n_chambers = 0
     while stack:
         node = stack.pop()
         i = len(node.sign_vector)
@@ -256,11 +232,10 @@ def inc_enu(
                 stack.append(child_opposite)
         else:
             # Leaf node
-            node.make_leaf(leaf_id, node.witness)
-            leaf_id += 1
-            if verbose and leaf_id % 1000 == 0:
-                print(f"Found {leaf_id} chambers...")
-    return leaf_id
+            node.make_leaf()
+            if verbose and n_chambers % 1000 == 0:
+                print(f"Found {n_chambers} chambers...")
+    return n_chambers
 
 
 def initial_witness(

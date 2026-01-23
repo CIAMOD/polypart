@@ -7,10 +7,9 @@ import tempfile
 
 import numpy as np
 
-from polypart.ppart import PartitionTree
 from polypart.geometry import Hyperplane, Polytope
-from polypart.io import save_tree, load_tree
-from polypart.ppart import build_partition_tree
+from polypart.io import load_tree, save_tree
+from polypart.ppart import PartitionTree, build_partition_tree
 
 
 def make_simple_tree() -> PartitionTree:
@@ -50,6 +49,6 @@ def test_save_load_roundtrip():
         if n1.cut is not None and n2.cut is not None:
             assert np.array_equal(n1.cut.normal, n2.cut.normal)
             assert n1.cut.offset == n2.cut.offset
-        assert len(n1.children) == len(n2.children)
-        nodes1.extend(n1.children)
-        nodes2.extend(n2.children)
+        assert len(n1._children) == len(n2._children)
+        nodes1.extend(n1._children)
+        nodes2.extend(n2._children)

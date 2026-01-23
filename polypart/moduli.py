@@ -5,6 +5,7 @@ for moduli spaces of parabolic vector bundles.
 
 import itertools
 import math
+from typing import Generator
 
 import numpy as np
 
@@ -77,3 +78,136 @@ def get_planes(
                 new_planes.append((v, ks2))
         planes += new_planes
     return planes
+
+
+def pullback(alphas: np.ndarray, d: np.array, sigma: list[int] | tuple[int]):
+    """
+    Parameters
+    ----------
+    alphas : np.ndarray
+        System of weighrs with shape [BATCH, n, r]
+    d : np.array
+        Degree of the each bundle. Shape [D] same as alphas
+    sigma : list
+        List of length n with permutations of the alphas
+
+    Returns
+    -------
+    tuple:
+        np.ndarray
+            New alpha matrices with shape [*, n, r]
+        np.array
+            New degree of each bundle
+    """
+
+    return alphas[:, sigma, :], d
+
+
+def hecke(alphas: np.ndarray, d: np.array, H: list[int] | tuple[int]):
+    """
+    Parameters
+    ----------
+    alphas : np.ndarray
+        Alpha matrices of shape [*, n, r]
+    d : np.array
+        Degree of the each bundle. Shape [*] same as alphas
+    H : list[int]
+        Hecke operator. Vector of integers between 0 and r-1 of size n
+
+    Returns
+    -------
+    tuple:
+        np.ndarray
+            New alpha matrices with shape [*, n, r]
+        np.array
+            New degree of each bundle
+    """
+    rows, column_indices = np.ogrid[: alphas.shape[1], : alphas.shape[2]]
+    shifts = -np.array(H) % alphas.shape[2]
+    column_indices = column_indices - shifts[:, np.newaxis]
+
+    # Roll each row independently
+    new_alphas = alphas[:, rows, column_indices]
+    # Substract first element of row to all elements
+    new_alphas = new_alphas - new_alphas[:, :, 0:1]
+    # Add 1 to negative values
+    new_alphas[new_alphas < 0] += 1
+
+    return new_alphas, (d - sum(H)) % alphas.shape[-1]
+
+
+def dualization(alphas: np.ndarray, d: np.array):
+    """
+    Parameters
+    ----------
+    alphas : np.ndarray
+        Alpha matrices of shape [*, n, r]
+    d : np.array
+        Degree of the each bundle. Shape [*] same as alphas
+
+    Returns
+    -------
+    tuple:
+        np.ndarray
+            New alpha matrices with shape [*, n, r]
+        np.array
+            New degree of each bundle
+    """
+    alphas = 1 - np.flip(alphas, axis=-1)
+    alphas = alphas - alphas[:, :, 0:1]
+    return alphas, -d % alphas.shape[-1]
+
+
+def basic_transformation(
+    alphas: np.ndarray,
+    d: np.array,
+    sigma: list[int] | tuple[int],
+    s: int,
+    H: list[int] | tuple[int],
+) -> tuple[np.ndarray, np.array]:
+    """
+    Parameters
+    ----------
+    alphas : np.ndarray
+        Alpha matrices of shape [*, n, r]
+    d : np.array
+        Degree of the each bundle. Shape [*] same as alphas
+    sigma : list
+        List of length n with permutations of the alphas
+    s : int
+        Sign of the dualization
+    H : list[int]
+        Hecke operator. Vector of integers between 0 and r-1 of size n
+
+    Returns
+    -------
+    tuple:
+        np.ndarray
+            New alpha matrix after applying the basic transformation
+        np.array
+            New degree of each bundle
+    """
+    alphas, d = pullback(alphas, d, sigma)
+    alphas, d = hecke(alphas, d, H)
+    alphas, d = dualization(alphas, d) if s == -1 else (alphas, d)
+    return alphas, d
+
+
+def generate_d_invariant_transformations(
+    n: int, r: int, d: int
+) -> Generator[tuple[int], int, tuple[int]]:
+    """
+    Generator that yields all possible basic transformations that can lead to an automorphism.
+    they must not change degree -> Hecke is restricted to sum(H) % r == 0
+
+    A basic transformation is a tuple of the form (sigma, s, H) where:
+    - sigma is a list of integers representing a permutation of the alphas
+    - s is -1 if dualization is applied, 1 otherwise
+    - H is a list of integers representing the Hecke operation for each alpha
+    """
+    for sigma in itertools.permutations(range(n)):
+        for s in [1, -1] if -d % r == d else [1]:
+            for H in itertools.product(range(r), repeat=n):
+                if (d - sum(H)) % r != d:
+                    continue
+                yield sigma, s, H
