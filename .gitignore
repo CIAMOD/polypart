@@ -1,9 +1,16 @@
+# examples folder
+examples/
+
 # data files
 data/
 
 # profiling
 *.prof
-profiling/
+profiling*/
+*profile*.py
+
+# dev settings
+.vscode/
 
 # pruebas or fixes
 fix*.py
@@ -80,9 +87,6 @@ db.sqlite3-journal
 # Flask stuff:
 instance/
 .webassets-cache
-
-# Ai
-.aiexclude
 
 # Scrapy stuff:
 .scrapy

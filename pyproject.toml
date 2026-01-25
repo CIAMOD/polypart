@@ -52,5 +52,12 @@ max-line-length = 88
 extend-ignore = ["E203", "W503"]
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["polypart*"]
 exclude = ["tests*", "examples*", "data*", "images*"]
+
+[dependency-groups]
+dev = [
+    "pandas>=2.3.3",
+    "seaborn>=0.13.2",
+]
