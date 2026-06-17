@@ -145,3 +145,22 @@ def generate_d_invariant_transformations(
                 if (d - sum(H)) % r != d:
                     continue
                 yield sigma, s, H
+
+
+def generate_d_invariant_transformations_no_pullback(
+    n: int, r: int, d: int
+) -> Generator[tuple[int], int, tuple[int]]:
+    """
+    Generator that yields all possible basic transformations that can lead to an automorphism.
+    they must not change degree -> Hecke is restricted to sum(H) % r == 0
+
+    A basic transformation is a tuple of the form (sigma, s, H) where:
+    - sigma is a list of integers representing a permutation of the alphas
+    - s is -1 if dualization is applied, 1 otherwise
+    - H is a list of integers representing the Hecke operation for each alpha
+    """
+    for s in [1, -1] if -d % r == d else [1]:
+        for H in itertools.product(range(r), repeat=n):
+            if (d - sum(H)) % r != d:
+                continue
+            yield tuple(range(n)), s, H

@@ -160,6 +160,7 @@ class Experiment:
         path = Path(folder) / self.dirname()
         results = []
         if not path.exists():
+            print(f"Warning: No results found in folder: {path}")
             return results
         for filename in os.listdir(path):
             if filename.endswith(".json"):

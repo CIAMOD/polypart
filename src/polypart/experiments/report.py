@@ -1,8 +1,12 @@
+import ast
 import math
+import warnings
 from collections import defaultdict
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 from .core import Experiment
 
@@ -44,19 +48,37 @@ def print_results_summary(
         prob_polypart_better = np.mean(
             [1 if p < i else 0 for p, i in zip(polypart_times, incenu_times)]
         )
+        # Calculate time per region for each run to ensure accurate standard deviations
+        polypart_per_region = [
+            t / r for t, r in zip(polypart_times, num_regions) if r > 0
+        ]
+        incenu_per_region = [t / r for t, r in zip(incenu_times, num_regions) if r > 0]
+        delres_per_region = [t / r for t, r in zip(delres_times, num_regions) if r > 0]
+
+        # Calculate statistics
         avg_num_regions, std_num_regions = mean_std(num_regions)
         mean_polypart_time, std_polypart_time = mean_std(polypart_times)
         mean_incenu_time, std_incenu_time = mean_std(incenu_times)
         mean_delres_time, std_delres_time = mean_std(delres_times)
+
+        # Calculate time per region statistics
+        mean_polypart_per, std_polypart_per = mean_std(polypart_per_region)
+        mean_incenu_per, std_incenu_per = mean_std(incenu_per_region)
+        mean_delres_per, std_delres_per = mean_std(delres_per_region)
+
         prob_polypart_better_str = (
             f"{prob_polypart_better:.3%}" if prob_polypart_better is not None else "N/A"
         )
+
         print(
             f"Experiment: {exp.dirname()}\n"
             f"  Avg num regions: {avg_num_regions:.2f} ± {std_num_regions:.2f}\n"
-            f"  PolyPart time: {mean_polypart_time} ± {std_polypart_time} ({len(polypart_times)} runs)\n"
-            f"  IncEnu time:   {mean_incenu_time} ± {std_incenu_time} ({len(incenu_times)} runs)\n"
-            f"  DelRes time:   {mean_delres_time} ± {std_delres_time} ({len(delres_times)} runs)\n"
+            f"  PolyPart time: {mean_polypart_time:.4f} ± {std_polypart_time:.4f} ({len(polypart_times)} runs)\n"
+            f"  IncEnu time:   {mean_incenu_time:.4f} ± {std_incenu_time:.4f} ({len(incenu_times)} runs)\n"
+            f"  DelRes time:   {mean_delres_time:.4f} ± {std_delres_time:.4f} ({len(delres_times)} runs)\n"
+            f"  PolyPart time/region: {mean_polypart_per:.4f} ± {std_polypart_per:.6f}\n"
+            f"  IncEnu time/region:   {mean_incenu_per:.4f} ± {std_incenu_per:.6f}\n"
+            f"  DelRes time/region:   {mean_delres_per:.4f} ± {std_delres_per:.6f}\n"
             f"  P(PolyPart < IncEnu): {prob_polypart_better_str}\n"
         )
 
@@ -167,7 +189,7 @@ def plot_experiment_summary(experiment: Experiment, folder: str = "./data"):
 
     # Plotting
     # -------------------------------------------------------------------------
-    fig, axs = plt.subplots(2, 2, figsize=(18, 12))
+    fig, axs = plt.subplots(2, 2, figsize=(15, 9))
 
     fig.suptitle(
         f"Experiment Summary: {experiment.dirname()} (runs={len(all_results)})",
@@ -245,6 +267,7 @@ def plot_experiment_summary(experiment: Experiment, folder: str = "./data"):
             ax.set_zorder(10)
             ax.patch.set_visible(False)  # Make primary axis background transparent
             ax2.set_zorder(1)
+
         # --------------------------------------------------
 
         for alpha in alphas:
@@ -281,7 +304,188 @@ def plot_experiment_summary(experiment: Experiment, folder: str = "./data"):
         ax.legend(loc="upper right", fontsize="small")
         ax.grid(True, alpha=0.3)
 
+        xticks = ax.get_xticks()
+        if len(xticks) > 20:
+            ax.set_xticks(xticks[::5])
+
     plt.tight_layout(pad=3.0)
+    plt.savefig(f"./figures/{experiment}.pdf")
+    plt.show()
+
+
+def human_format(num, pos=None):
+    """Formatter to display large numbers compactly (e.g., 10K, 1M)."""
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return "%.1f%s" % (num, ["", "K", "M", "G", "T", "P"][magnitude])
+
+
+def plot_experiment_summary_paper(
+    experiment,
+    folder: str = "./data",
+    remove_titles: bool = False,
+):
+    """
+    Summary plot of all runs of an experiment.
+    Plots the mean and standard deviation per depth for candidates, inequalities, and vertices.
+    Optimized for a 1x3 layout for paper figures, including a background node histogram.
+    """
+    all_results = experiment.load(folder=folder)
+    if len(all_results) == 0:
+        print(f"No results found for experiment {experiment.dirname()}")
+        return
+
+    # Filter all_results to ensure per-depth stats exist
+    all_results = [
+        res
+        for res in all_results
+        if res.get("ppart_stats") is not None
+        and "per_depth_moments_vertices" in res["ppart_stats"]
+    ]
+    if len(all_results) == 0:
+        print(f"No per-depth moments data found for experiment {experiment.dirname()}")
+        return
+
+    # Data structures to aggregate across all runs
+    depth_candidates = {}
+    depth_inequalities = {}
+    depth_vertices = {}
+    all_per_depth_nodes = {}
+
+    for res in all_results:
+        ppart_stats = res["ppart_stats"]
+
+        moments_candidates = ppart_stats.get("per_depth_moments_candidates", {})
+        moments_inequalities = ppart_stats.get("per_depth_moments_inequalities", {})
+        moments_vertices = ppart_stats.get("per_depth_moments_vertices", {})
+
+        # We assume alpha=1 or alpha="1" represents the standard mean.
+        # Safely extract the correct key based on how the dictionary is keyed.
+        alpha_key = 1 if 1 in moments_candidates else "1"
+
+        mc = moments_candidates.get(alpha_key, {})
+        mi = moments_inequalities.get(alpha_key, {})
+        mv = moments_vertices.get(alpha_key, {})
+
+        # Aggregate metrics
+        for depth, val in mc.items():
+            depth_candidates.setdefault(depth, []).append(val)
+        for depth, val in mi.items():
+            depth_inequalities.setdefault(depth, []).append(val)
+        for depth, val in mv.items():
+            depth_vertices.setdefault(depth, []).append(val)
+
+        # Aggregate Node Counts
+        if "per_depth_nodes" in ppart_stats:
+            for depth, count in ppart_stats["per_depth_nodes"].items():
+                all_per_depth_nodes.setdefault(depth, []).append(count)
+
+    # Prepare Node Histogram Data
+    if all_per_depth_nodes:
+        sorted_node_depths = sorted(all_per_depth_nodes.keys(), key=lambda x: int(x))
+        avg_nodes_per_depth = [
+            np.mean(all_per_depth_nodes[d]) for d in sorted_node_depths
+        ]
+        max_avg_node = max(avg_nodes_per_depth) if avg_nodes_per_depth else 1
+    else:
+        sorted_node_depths = []
+        avg_nodes_per_depth = []
+        max_avg_node = 1
+
+    # Plotting
+    # -------------------------------------------------------------------------
+    fig, axs = plt.subplots(1, 3, figsize=(14, 3.5))
+
+    moment_configs = [
+        (depth_candidates, "$|A_k|$", axs[0]),
+        (depth_inequalities, "$|P_k|$", axs[1]),
+        (depth_vertices, "$|V_k|$", axs[2]),
+    ]
+
+    for i, (metric_data, ylabel, ax) in enumerate(moment_configs):
+        # --- Secondary Axis: Node Histogram ---
+        if sorted_node_depths:
+            ax2 = ax.twinx()
+            ax2.bar(
+                sorted_node_depths,
+                avg_nodes_per_depth,
+                color="gray",
+                alpha=0.15,
+                width=0.8,
+            )
+            ax2.set_ylim(0, max_avg_node * 3)
+
+            # Only show the secondary label/ticks on the final (far right) plot
+            if i == 2:
+                ax2.set_ylabel(
+                    "Avg Node Count",
+                    color="gray",
+                    fontsize=10,
+                    labelpad=15,
+                    rotation=270,
+                )
+                ax2.tick_params(axis="y", labelcolor="gray", labelsize=9)
+                ax2.yaxis.set_major_formatter(FuncFormatter(human_format))
+            else:
+                ax2.set_yticklabels([])
+                ax2.tick_params(axis="y", length=0)
+
+            ax2.grid(False)
+            ax.set_zorder(10)
+            ax.patch.set_visible(False)
+            ax2.set_zorder(1)
+
+        # --- Primary Axis: Mean & Std Dev Lines ---
+        depths = sorted(metric_data.keys(), key=lambda x: int(x))
+        if not depths:
+            continue
+
+        avg_vals = [np.mean(metric_data[d]) for d in depths]
+        std_vals = [np.std(metric_data[d]) for d in depths]
+
+        # Plot the mean line
+        (line,) = ax.plot(
+            depths,
+            avg_vals,
+            marker="o",
+            markersize=4,
+            linewidth=1.5,
+            label="Mean",
+            color="#1f77b4",  # Matplotlib standard blue
+        )
+
+        # Shade the standard deviation
+        ax.fill_between(
+            depths,
+            np.array(avg_vals) - np.array(std_vals),
+            np.array(avg_vals) + np.array(std_vals),
+            alpha=0.2,
+            color="#1f77b4",
+            label="$\pm 1$ Std Dev",
+        )
+
+        if not remove_titles:
+            ax.set_title(f"Per-Depth Evolution of {ylabel}", fontsize=12)
+
+        ax.set_xlabel("Depth", fontsize=11)
+        ax.set_ylabel(ylabel, fontsize=11)
+
+        # Add legend only to the first subplot to save space
+        if i == 0:
+            ax.legend(loc="upper right", fontsize="small", framealpha=0.9)
+
+        ax.grid(True, alpha=0.3)
+
+        # Prevent overlapping X-ticks
+        xticks = ax.get_xticks()
+        if len(xticks) > 10:
+            ax.set_xticks(xticks[:: max(1, len(xticks) // 10)])
+
+    plt.tight_layout(pad=0.5)
+
+    plt.savefig(f"./figures/{experiment.dirname()}.pdf", bbox_inches="tight")
     plt.show()
 
 
@@ -335,9 +539,13 @@ def plot_random_report(experiments: list, folder: str = "./data"):
         num_runs = len(results)
         if d in num_runs_by_dim:
             if num_runs_by_dim[d] != num_runs:
-                raise ValueError(
-                    f"Inconsistent number of runs for dimension {d}: "
-                    f"found {num_runs_by_dim[d]} and {num_runs}."
+                # raise ValueError(
+                #     f"Inconsistent number of runs for dimension {d}: "
+                #     f"found {num_runs_by_dim[d]} and {num_runs}."
+                # )
+                print(
+                    f"Warning: Inconsistent number of runs for dimension {d} and m={m} "
+                    f"(found {num_runs} instead of {num_runs_by_dim[d]})."
                 )
         else:
             num_runs_by_dim[d] = num_runs
@@ -451,6 +659,7 @@ def plot_random_report(experiments: list, folder: str = "./data"):
         axs[i // ncols][i % ncols].axis("off")
 
     plt.tight_layout()
+    plt.savefig("./figures/random_report.pdf")
     plt.show()
 
 
@@ -734,56 +943,268 @@ def plot_memory_per_m_across_dim(experiments: list[Experiment], folder: str = ".
     plt.show()
 
 
-def plot_moduli_report(experiments_n1, experiments_r2, folder):
-    """
-    Generates two integrated figures for Moduli Spaces.
-    Each figure shows Time (lines) and Peak Memory (bars) on the same plot.
-    """
+# Moduli Hyperplanes Lookup Table
+_MODULI_HYPERPLANES_LOOKUP = {
+    (1, 2): 0,
+    (1, 3): 1,
+    (1, 4): 3,
+    (1, 5): 11,
+    (1, 6): 21,
+    (1, 7): 65,
+    (1, 8): 129,
+    (1, 9): 307,
+    (2, 2): 1,
+    (2, 3): 9,
+    (2, 4): 41,
+    (2, 5): 215,
+    (2, 6): 799,
+    (2, 7): 3927,
+    (2, 8): 15049,
+    (3, 2): 4,
+    (3, 3): 45,
+    (3, 4): 344,
+    (3, 5): 3075,
+    (3, 6): 21379,
+    (4, 2): 12,
+    (4, 3): 189,
+    (4, 4): 2540,
+    (4, 5): 39875,
+    (5, 2): 32,
+    (5, 3): 729,
+    (5, 4): 17840,
+    (6, 2): 80,
+    (6, 3): 2673,
+    (7, 2): 192,
+    (8, 2): 448,
+}
 
-    hyperplanes_lookup = {
-        (1, 2): 0,
-        (1, 3): 1,
-        (1, 4): 3,
-        (1, 5): 11,
-        (1, 6): 21,
-        (1, 7): 65,
-        (1, 8): 129,
-        (1, 9): 307,
-        (2, 2): 1,
-        (2, 3): 9,
-        (2, 4): 41,
-        (2, 5): 215,
-        (2, 6): 799,
-        (2, 7): 3927,
-        (2, 8): 15049,
-        (3, 2): 4,
-        (3, 3): 45,
-        (3, 4): 344,
-        (3, 5): 3075,
-        (3, 6): 21379,
-        (4, 2): 12,
-        (4, 3): 189,
-        (4, 4): 2540,
-        (4, 5): 39875,
-        (5, 2): 32,
-        (5, 3): 729,
-        (5, 4): 17840,
-        (6, 2): 80,
-        (6, 3): 2673,
-        (7, 2): 192,
-        (8, 2): 448,
+
+# def _get_moduli_aggregated_stats(experiment_obj: Experiment, folder):
+#     """
+#     Extract aggregated timing and memory statistics from a single experiment.
+
+#     Returns a dict with mean/std for each algorithm's time and memory usage,
+#     plus the total number of results.
+#     """
+#     results = experiment_obj.load(folder=folder)
+
+#     def calc_stat(data):
+#         return (np.mean(data), np.std(data)) if data else (0, 0)
+
+#     # Extraction with safety filters
+#     poly_times = [
+#         r["polypart_time"] for r in results if r.get("polypart_time") is not None
+#     ]
+#     inc_times = [r["incenu_time"] for r in results if r.get("incenu_time") is not None]
+#     del_times = [r["delres_time"] for r in results if r.get("delres_time") is not None]
+
+#     poly_mems = [
+#         r.get("polypart_peak_ram_mb")
+#         for r in results
+#         if r.get("polypart_peak_ram_mb") is not None
+#     ]
+#     inc_mems = [
+#         r.get("incenu_peak_ram_mb")
+#         for r in results
+#         if r.get("incenu_peak_ram_mb") is not None
+#     ]
+#     del_mems = [
+#         r.get("delres_peak_ram_mb")
+#         for r in results
+#         if r.get("delres_peak_ram_mb") is not None
+#     ]
+
+#     return {
+#         "poly_time": calc_stat(poly_times),
+#         "poly_mem": calc_stat(poly_mems),
+#         "inc_time": calc_stat(inc_times),
+#         "inc_mem": calc_stat(inc_mems),
+#         "del_time": calc_stat(del_times),
+#         "del_mem": calc_stat(del_mems),
+#         "num_results": len(results),
+#     }
+
+
+# def _process_moduli_experiments(exp_list, setting_type, folder):
+#     """
+#     Process a list of moduli experiments and aggregate statistics.
+
+#     Args:
+#         exp_list: List of Experiment objects
+#         setting_type: Either "n1" (fixed n=1) or "r2" (fixed r=2)
+#         folder: Data folder path
+
+#     Returns:
+#         Dictionary with aggregated data ready for plotting
+#     """
+#     data = {
+#         "x_vals": [],
+#         "labels": [],
+#         "poly_t_m": [],
+#         "poly_t_s": [],
+#         "poly_m_m": [],
+#         "inc_t_m": [],
+#         "inc_t_s": [],
+#         "inc_m_m": [],
+#         "del_t_m": [],
+#         "del_t_s": [],
+#         "del_m_m": [],
+#         "num_results": [],
+#     }
+#     sorted_exps = sorted(exp_list, key=lambda e: e.d)
+
+#     for exp in sorted_exps:
+#         d = exp.d
+#         n, r = (1, d + 1) if setting_type == "n1" else (d, 2)
+#         m = _MODULI_HYPERPLANES_LOOKUP.get((n, r), "?")
+#         stats = _get_moduli_aggregated_stats(exp, folder)
+
+#         data["x_vals"].append(r if setting_type == "n1" else n)
+#         # Vertical stack for labels
+#         label = f"n={n}, r={r}\nd={d}\nm={m}"
+#         data["labels"].append(label)
+
+#         for alg in ["poly", "inc", "del"]:
+#             data[f"{alg}_t_m"].append(stats[f"{alg}_time"][0])
+#             data[f"{alg}_t_s"].append(stats[f"{alg}_time"][1])
+#             data[f"{alg}_m_m"].append(stats[f"{alg}_mem"][0])
+
+#         data["num_results"].append(stats["num_results"])
+
+#     # Check if the number of results is consistent across experiments
+#     if len(set(data["num_results"])) != 1:
+#         raise ValueError(
+#             f"Inconsistent number of results across experiments: {data['num_results']}"
+#         )
+
+#     return data
+
+
+# def _create_moduli_integrated_figure(data, title):
+#     """
+#     Create an integrated figure showing both time (lines) and memory (bars).
+
+#     Args:
+#         data: Processed experiment data dictionary
+#         title: Figure title string
+#     """
+#     _, ax1 = plt.subplots(figsize=(8, 5))
+
+#     indices = np.arange(len(data["x_vals"]))
+#     width = 0.22  # Padding between grouped bars
+
+#     styles = {
+#         "poly": {"c": "#1f77b4", "marker": "o-", "label": "PolyPart"},
+#         "inc": {"c": "#ff7f0e", "marker": "s-", "label": "IncEnu"},
+#         "del": {"c": "#2ca02c", "marker": "^-", "label": "DelRes"},
+#     }
+
+#     # --- Axis 2: Memory (Bars) ---
+#     ax2 = ax1.twinx()
+#     for i, (alg, s) in enumerate(styles.items()):
+#         ax2.bar(
+#             indices + (i - 1) * width,
+#             data[f"{alg}_m_m"],
+#             width,
+#             color=s["c"],
+#             alpha=0.3,
+#             label=f"{s['label']} Memory",
+#         )
+
+#     # Scaling to keep bars in the bottom 40% of the plot
+#     all_mem_vals = data["poly_m_m"] + data["inc_m_m"] + data["del_m_m"]
+#     max_mem = max(all_mem_vals) if all_mem_vals else 1
+#     ax2.set_ylim(0, max_mem * 2.5)
+#     ax2.set_ylabel("Peak RAM Usage (MB)", color="grey", alpha=0.7)
+#     ax2.tick_params(axis="y", labelcolor="grey")
+
+#     # --- Axis 1: Time (Lines) ---
+#     for alg, s in styles.items():
+#         m_val = np.array(data[f"{alg}_t_m"])
+#         std_val = np.array(data[f"{alg}_t_s"])
+#         ax1.plot(
+#             indices, m_val, s["marker"], color=s["c"], label=s["label"], linewidth=2
+#         )
+#         ax1.fill_between(
+#             indices, m_val - std_val, m_val + std_val, color=s["c"], alpha=0.15
+#         )
+
+#     ax1.set_yscale("log")
+#     ax1.set_ylabel("Computation Time (s)")
+#     ax1.set_xticks(indices)
+#     ax1.set_xticklabels(data["labels"], fontsize=9)
+#     ax1.grid(True, linestyle="--", alpha=0.6)
+
+#     # Add number of runs to the title
+#     num_runs = data["num_results"][0]
+#     ax1.set_title(f"{title} (Runs={num_runs})", fontsize=14, pad=20)
+
+#     # Combined legend
+#     lines, l_labels = ax1.get_legend_handles_labels()
+#     bars, b_labels = ax2.get_legend_handles_labels()
+#     ax1.legend(
+#         lines + bars,
+#         l_labels + b_labels,
+#         loc="upper left",
+#         ncol=2,
+#         fontsize="small",
+#     )
+
+#     plt.tight_layout()
+#     plt.show()
+
+
+def _load_runtime_log(path: Path) -> dict:
+    """
+    Load and parse runtime.log file to extract timing and memory data.
+
+    Returns a dict with lists of times and memory for each algorithm found.
+    """
+    log_path = path / "runtime.log"
+    if not log_path.exists():
+        raise FileNotFoundError(f"No runtime.log found in {path}")
+
+    data = {
+        "ppart": {"times": [], "mems": []},
+        "incenu": {"times": [], "mems": []},
+        "delres": {"times": [], "mems": []},
     }
 
-    def get_aggregated_stats(experiment_obj):
-        try:
-            results = experiment_obj.load(folder=folder)
-        except AttributeError:
-            results = getattr(experiment_obj, "results", [])
+    with open(log_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = ast.literal_eval(line)
+                algo = entry.get("algo")
+                if algo in data:
+                    if entry.get("time") is not None:
+                        data[algo]["times"].append(entry["time"])
+                    if entry.get("peak_ram_mb") is not None:
+                        data[algo]["mems"].append(entry["peak_ram_mb"])
+            except (ValueError, SyntaxError):
+                continue
 
-        def calc_stat(data):
-            return (np.mean(data), np.std(data)) if data else (0, 0)
+    return data
 
-        # Extraction with safety filters
+
+def _get_moduli_aggregated_stats(experiment_obj, folder):
+    """
+    Extract aggregated timing and memory statistics from a single experiment.
+
+    Returns a dict with mean/std for each algorithm's time and memory usage,
+    plus the total number of results and a flag indicating if data came from runtime.log.
+    """
+    results = experiment_obj.load(folder=folder)
+    from_runtime_log = False
+    missing_algo = None
+
+    def calc_stat(data):
+        return (np.mean(data), np.std(data)) if data else (0, 0)
+
+    if results:
+        # Normal case: we have .json results
         poly_times = [
             r["polypart_time"] for r in results if r.get("polypart_time") is not None
         ]
@@ -810,132 +1231,278 @@ def plot_moduli_report(experiments_n1, experiments_r2, folder):
             if r.get("delres_peak_ram_mb") is not None
         ]
 
-        return {
-            "poly_time": calc_stat(poly_times),
-            "poly_mem": calc_stat(poly_mems),
-            "inc_time": calc_stat(inc_times),
-            "inc_mem": calc_stat(inc_mems),
-            "del_time": calc_stat(del_times),
-            "del_mem": calc_stat(del_mems),
-            "num_results": len(results),
+        num_results = len(results)
+    else:
+        # Fallback: load from runtime.log
+        path = Path(folder) / experiment_obj.dirname()
+        runtime_data = _load_runtime_log(path)
+        from_runtime_log = True
+
+        poly_times = runtime_data["ppart"]["times"]
+        inc_times = runtime_data["incenu"]["times"]
+        del_times = runtime_data["delres"]["times"]
+
+        poly_mems = runtime_data["ppart"]["mems"]
+        inc_mems = runtime_data["incenu"]["mems"]
+        del_mems = runtime_data["delres"]["mems"]
+
+        # Determine which algorithm is missing (the one currently running)
+        # The missing algo will have fewer entries or none at all
+        counts = {
+            "ppart": len(poly_times),
+            "incenu": len(inc_times),
+            "delres": len(del_times),
         }
 
-    def process_experiments(exp_list, setting_type):
-        data = {
-            "x_vals": [],
-            "labels": [],
-            "poly_t_m": [],
-            "poly_t_s": [],
-            "poly_m_m": [],
-            "inc_t_m": [],
-            "inc_t_s": [],
-            "inc_m_m": [],
-            "del_t_m": [],
-            "del_t_s": [],
-            "del_m_m": [],
-            "num_results": [],
-        }
-        sorted_exps = sorted(exp_list, key=lambda e: e.d)
+        if counts:
+            max_count = max(counts.values())
+            # Find algorithms with fewer runs (likely the one that's still running or hasn't started)
+            for algo, count in counts.items():
+                if count < max_count or count == 0:
+                    missing_algo = algo
+                    break
 
-        for exp in sorted_exps:
-            d = exp.d
-            n, r = (1, d + 1) if setting_type == "n1" else (d, 2)
-            m = hyperplanes_lookup.get((n, r), "?")
-            stats = get_aggregated_stats(exp)
+        # Use the max count as num_results for runtime.log case
+        num_results = max(counts.values()) if counts else 0
 
-            data["x_vals"].append(r if setting_type == "n1" else n)
-            # Vertical stack for labels
-            label = f"n={n}, r={r}\nd={d}\nm={m}"
-            data["labels"].append(label)
+    return {
+        "poly_time": calc_stat(poly_times),
+        "poly_mem": calc_stat(poly_mems),
+        "inc_time": calc_stat(inc_times),
+        "inc_mem": calc_stat(inc_mems),
+        "del_time": calc_stat(del_times),
+        "del_mem": calc_stat(del_mems),
+        "num_results": num_results,
+        "from_runtime_log": from_runtime_log,
+        "missing_algo": missing_algo,
+    }
 
-            for alg in ["poly", "inc", "del"]:
-                data[f"{alg}_t_m"].append(stats[f"{alg}_time"][0])
-                data[f"{alg}_t_s"].append(stats[f"{alg}_time"][1])
-                data[f"{alg}_m_m"].append(stats[f"{alg}_mem"][0])
 
-            data["num_results"].append(stats["num_results"])
+def _process_moduli_experiments(exp_list, setting_type, folder):
+    """
+    Process a list of moduli experiments and aggregate statistics.
 
-        # Check if the number of results is consistent across experiments
-        if len(set(data["num_results"])) != 1:
-            raise ValueError(
-                "Inconsistent number of results across experiments: "
-                f"{data['num_results']}"
-            )
+    Args:
+        exp_list: List of Experiment objects
+        setting_type: Either "n1" (fixed n=1) or "r2" (fixed r=2)
+        folder: Data folder path
 
-        return data
+    Returns:
+        Dictionary with aggregated data ready for plotting
+    """
+    data = {
+        "x_vals": [],
+        "labels": [],
+        "poly_t_m": [],
+        "poly_t_s": [],
+        "poly_m_m": [],
+        "inc_t_m": [],
+        "inc_t_s": [],
+        "inc_m_m": [],
+        "del_t_m": [],
+        "del_t_s": [],
+        "del_m_m": [],
+        "num_results": [],
+        "from_runtime_log": [],
+        "missing_algo": [],
+    }
+    sorted_exps = sorted(exp_list, key=lambda e: e.d)
 
-    def create_integrated_figure(data, title):
-        _, ax1 = plt.subplots(figsize=(8, 5))
+    for exp in sorted_exps:
+        d = exp.d
+        n, r = (1, d + 1) if setting_type == "n1" else (d, 2)
+        m = _MODULI_HYPERPLANES_LOOKUP.get((n, r), "?")
+        stats = _get_moduli_aggregated_stats(exp, folder)
 
-        indices = np.arange(len(data["x_vals"]))
-        width = 0.22  # Padding between grouped bars
+        data["x_vals"].append(r if setting_type == "n1" else n)
+        # Vertical stack for labels
+        label = f"n={n}, r={r}\nd={d}\nm={m}"
+        data["labels"].append(label)
 
-        styles = {
-            "poly": {"c": "#1f77b4", "marker": "o-", "label": "PolyPart"},
-            "inc": {"c": "#ff7f0e", "marker": "s-", "label": "IncEnu"},
-            "del": {"c": "#2ca02c", "marker": "^-", "label": "DelRes"},
-        }
+        for alg in ["poly", "inc", "del"]:
+            data[f"{alg}_t_m"].append(stats[f"{alg}_time"][0])
+            data[f"{alg}_t_s"].append(stats[f"{alg}_time"][1])
+            data[f"{alg}_m_m"].append(stats[f"{alg}_mem"][0])
 
-        # --- Axis 2: Memory (Bars) ---
-        ax2 = ax1.twinx()
-        for i, (alg, s) in enumerate(styles.items()):
-            ax2.bar(
-                indices + (i - 1) * width,
-                data[f"{alg}_m_m"],
-                width,
-                color=s["c"],
-                alpha=0.3,
-                label=f"{s['label']} Memory",
-            )
+        data["num_results"].append(stats["num_results"])
+        data["from_runtime_log"].append(stats["from_runtime_log"])
+        data["missing_algo"].append(stats["missing_algo"])
 
-        # Scaling to keep bars in the bottom 40% of the plot
-        all_mem_vals = data["poly_m_m"] + data["inc_m_m"] + data["del_m_m"]
-        max_mem = max(all_mem_vals) if all_mem_vals else 1
-        ax2.set_ylim(0, max_mem * 2.5)
-        ax2.set_ylabel("Peak RAM Usage (MB)", color="grey", alpha=0.7)
-        ax2.tick_params(axis="y", labelcolor="grey")
+    # Check if the number of results is consistent across experiments (now just a warning)
+    unique_counts = set(data["num_results"])
+    if len(unique_counts) != 1:
+        warnings.warn(
+            f"Inconsistent number of results across experiments: {data['num_results']}"
+        )
 
-        # --- Axis 1: Time (Lines) ---
-        for alg, s in styles.items():
-            m_val = np.array(data[f"{alg}_t_m"])
-            std_val = np.array(data[f"{alg}_t_s"])
+    return data
+
+
+def _create_moduli_integrated_figure(data, title):
+    """
+    Create an integrated figure showing both time (lines) and memory (bars).
+
+    For experiments loaded from runtime.log with a missing algorithm,
+    the line will stop at the previous point and show a star marker.
+
+    Args:
+        data: Processed experiment data dictionary
+        title: Figure title string
+    """
+    _, ax1 = plt.subplots(figsize=(8, 5))
+
+    indices = np.arange(len(data["x_vals"]))
+    width = 0.22  # Padding between grouped bars
+
+    styles = {
+        "poly": {
+            "c": "#1f77b4",
+            "marker": "o",
+            "label": "PolyPart",
+            "algo_key": "ppart",
+        },
+        "inc": {"c": "#ff7f0e", "marker": "s", "label": "IncEnu", "algo_key": "incenu"},
+        "del": {"c": "#2ca02c", "marker": "^", "label": "DelRes", "algo_key": "delres"},
+    }
+
+    # --- Axis 2: Memory (Bars) ---
+    ax2 = ax1.twinx()
+    for i, (alg, s) in enumerate(styles.items()):
+        ax2.bar(
+            indices + (i - 1) * width,
+            data[f"{alg}_m_m"],
+            width,
+            color=s["c"],
+            alpha=0.3,
+            label=f"{s['label']} Memory",
+        )
+
+    # Scaling to keep bars in the bottom 40% of the plot
+    all_mem_vals = data["poly_m_m"] + data["inc_m_m"] + data["del_m_m"]
+    max_mem = max(all_mem_vals) if all_mem_vals else 1
+    ax2.set_ylim(0, max_mem * 2.5)
+    ax2.set_ylabel("Peak RAM Usage (MB)", color="grey", alpha=0.7)
+    ax2.tick_params(axis="y", labelcolor="grey")
+
+    # --- Axis 1: Time (Lines) ---
+    for alg, s in styles.items():
+        m_val = np.array(data[f"{alg}_t_m"])
+        std_val = np.array(data[f"{alg}_t_s"])
+
+        # Check if the last experiment has this algorithm missing
+        last_idx = len(indices) - 1
+        last_missing = data["missing_algo"][last_idx]
+        last_from_log = data["from_runtime_log"][last_idx]
+
+        if last_from_log and last_missing == s["algo_key"]:
+            # This algorithm is missing in the last experiment
+            # Plot up to the second-to-last point with normal markers
+            if last_idx > 0:
+                ax1.plot(
+                    indices[: last_idx - 1],
+                    m_val[: last_idx - 1],
+                    f"{s['marker']}-",
+                    color=s["c"],
+                    label=s["label"],
+                    linewidth=2,
+                )
+                ax1.fill_between(
+                    indices[:last_idx],
+                    m_val[:last_idx] - std_val[:last_idx],
+                    m_val[:last_idx] + std_val[:last_idx],
+                    color=s["c"],
+                    alpha=0.15,
+                )
+                # Add a line segment to the last valid point without marker
+                ax1.plot(
+                    indices[last_idx - 2 : last_idx],
+                    m_val[last_idx - 2 : last_idx],
+                    "-",
+                    color=s["c"],
+                    linewidth=2,
+                )
+                # Add a star at the last valid point to indicate "in progress"
+                ax1.plot(
+                    indices[last_idx - 1],
+                    m_val[last_idx - 1],
+                    "x",
+                    color=s["c"],
+                    markersize=10,
+                    # markeredgecolor="black",
+                    markeredgewidth=2,
+                    zorder=10,
+                )
+        else:
+            # Normal case: plot all points
             ax1.plot(
-                indices, m_val, s["marker"], color=s["c"], label=s["label"], linewidth=2
+                indices,
+                m_val,
+                f"{s['marker']}-",
+                color=s["c"],
+                label=s["label"],
+                linewidth=2,
+                markersize=7 if s["marker"] == "^" else 6,
             )
             ax1.fill_between(
                 indices, m_val - std_val, m_val + std_val, color=s["c"], alpha=0.15
             )
 
-        ax1.set_yscale("log")
-        ax1.set_ylabel("Computation Time (s)")
-        ax1.set_xticks(indices)
-        ax1.set_xticklabels(data["labels"], fontsize=9)
-        ax1.grid(True, linestyle="--", alpha=0.6)
+    ax1.set_yscale("log")
+    ax1.set_ylabel("Computation Time (s)")
+    ax1.set_xticks(indices)
+    ax1.set_xticklabels(data["labels"], fontsize=9)
+    ax1.grid(True, linestyle="--", alpha=0.6)
 
-        # Add number of runs to the title
-        num_runs = data["num_results"][0]
-        ax1.set_title(f"{title} (Runs={num_runs})", fontsize=14, pad=20)
+    # Add number of runs to the title (use max for display when inconsistent)
+    num_runs = max(data["num_results"]) if data["num_results"] else 0
+    title_suffix = f" (Runs={num_runs})"
 
-        # Combined legend
-        lines, l_labels = ax1.get_legend_handles_labels()
-        bars, b_labels = ax2.get_legend_handles_labels()
-        ax1.legend(
-            lines + bars,
-            l_labels + b_labels,
-            loc="upper left",
-            ncol=2,
-            fontsize="small",
-        )
+    # Indicate if last experiment is from runtime.log
+    if data["from_runtime_log"][-1]:
+        title_suffix += " [Last: In Progress]"
 
-        plt.tight_layout()
-        plt.show()
+    # ax1.set_title(f"{title}{title_suffix}", fontsize=14, pad=20)
 
-    # Pre-process and render
-    n1_results = process_experiments(experiments_n1, "n1")
-    r2_results = process_experiments(experiments_r2, "r2")
+    # Combined legend
+    lines, l_labels = ax1.get_legend_handles_labels()
+    bars, b_labels = ax2.get_legend_handles_labels()
+    ax1.legend(
+        lines + bars,
+        l_labels + b_labels,
+        loc="upper left",
+        ncol=2,
+        fontsize="small",
+    )
 
-    create_integrated_figure(n1_results, "Moduli Spaces: fixed n=1")
-    create_integrated_figure(r2_results, "Moduli Spaces: fixed r=2")
+    plt.tight_layout()
+    plt.savefig(f"./figures/moduli_{title}_report.pdf")
+    plt.show()
+
+
+def plot_moduli_n1_report(experiments, folder="./data"):
+    """
+    Generate integrated figure for Moduli Spaces with fixed n=1.
+    Shows Time (lines) and Peak Memory (bars) on the same plot.
+
+    Args:
+        experiments: List of Experiment objects with fixed n=1
+        folder: Data folder path
+    """
+    data = _process_moduli_experiments(experiments, "n1", folder)
+    _create_moduli_integrated_figure(data, "n1")
+
+
+def plot_moduli_r2_report(experiments, folder="./data"):
+    """
+    Generate integrated figure for Moduli Spaces with fixed r=2.
+    Shows Time (lines) and Peak Memory (bars) on the same plot.
+
+    Args:
+        experiments: List of Experiment objects with fixed r=2
+        folder: Data folder path
+    """
+    data = _process_moduli_experiments(experiments, "r2", folder)
+    _create_moduli_integrated_figure(data, "r2")
 
 
 def plot_permutahedron_report(experiments, folder):
@@ -945,10 +1512,7 @@ def plot_permutahedron_report(experiments, folder):
     """
 
     def get_aggregated_stats(experiment_obj):
-        try:
-            results = experiment_obj.load(folder=folder)
-        except AttributeError:
-            results = getattr(experiment_obj, "results", [])
+        results = experiment_obj.load(folder=folder)
 
         def calc_stat(data):
             return (np.mean(data), np.std(data)) if data else (0, 0)
@@ -1073,14 +1637,14 @@ def plot_permutahedron_report(experiments, folder):
     ax1.set_xlabel("Dimension ($d$)")
     ax1.set_xticks(indices)
     ax1.set_xticklabels(
-        [f"d={d}\nm={d * (d - 1) // 2 - 1}" for d in data["dims"]], fontsize=9
+        [f"d={d}\nm={d * (d - 1) // 2}" for d in data["dims"]], fontsize=9
     )
     ax1.grid(True, linestyle="--", alpha=0.6)
-    ax1.set_title(
-        f"Permutahedron Arrangement (Runs={num_runs})",
-        fontsize=12,
-        pad=15,
-    )
+    # ax1.set_title(
+    #     f"Permutahedron Arrangement (Runs={num_runs})",
+    #     fontsize=12,
+    #     pad=15,
+    # )
 
     # Combined legend
     lines, l_labels = ax1.get_legend_handles_labels()
@@ -1090,6 +1654,8 @@ def plot_permutahedron_report(experiments, folder):
     )
 
     plt.tight_layout()
+    # save fig as pdf in ./figures
+    plt.savefig("./figures/permutahedron_report.pdf")
     plt.show()
 
 

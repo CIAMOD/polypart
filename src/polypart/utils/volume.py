@@ -88,7 +88,13 @@ def _extract_volume_from_out(out_file: Path) -> Fraction:
 def volume_nmz(
     A: FractionMatrix, b: FractionVector, normaliz_exe: str = "normaliz"
 ) -> Fraction:
-    """Compute Euclidean volume of polytope P = { x : A x <= b } using Normaliz."""
+    """Compute Euclidean volume of polytope P = { x : A x <= b } using Normaliz.
+    Requires Normaliz to be installed and accessible via command line or to provide path to executable.
+    Args:
+        A: Coefficient matrix of inequalities.
+        b: Right-hand side vector of inequalities.
+        normaliz_exe: Normaliz executable name or path.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         in_file = Path(tmpdir) / "polytope.in"
         write_normaliz_input(A, b, in_file)

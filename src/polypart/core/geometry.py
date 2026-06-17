@@ -358,6 +358,13 @@ class Polytope(Polyhedron):
             raise ValueError("Unbounded polytope: contains rays.")
         self._vertices = V[:, 1:]
 
+        # Extract the irredundant H-representation natively filtered by DDM
+        # irredundant_mat = np.array(
+        #     cdd.gmp.copy_inequalities(polyhedron).array, dtype=object
+        # )
+        # self._b = irredundant_mat[:, 0].reshape(-1, 1)
+        # self._A = -irredundant_mat[:, 1:]
+
     def filter_inequalities(
         self, cut_hyperplane: Hyperplane, hv: Optional[np.ndarray] = None
     ) -> tuple[FractionMatrix, FractionVector]:
